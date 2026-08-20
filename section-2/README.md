@@ -210,6 +210,73 @@ printf("%c %c\n", *p, **q);  // a a
 printf("%c %c\n", *p, **q);  // b b
 ```
 
+### 2.4. Arrays vs. pointers
+
+An array and a pointer are different types:
+
+- An array is an object consisting of a fixed number of elements of the same type stored contiguously in memory.
+    ```c
+    int arr[5] = {1, 2, 3, 4, 5}; // arr is a variable of type int[5]
+    ```
+
+- A pointer is a variable that holds an address of another variable.
+    ```c
+    int a = 999;
+    int *q = &a; // q is a pointer variable of type int*
+    ``` 
+Some similarities and differences of an array and a pointer:
+
+```c
+int arr[5] = {1, 2, 3, 4, 5};
+int *p = arr;
+```
+- Suppose the first element has the address of 0xA0
+  ```c
+  printf("%p", p); // 0xA0
+  
+  printf("%p", arr); // 0xA0
+  
+  printf("%p", &arr); // 0xA0
+  
+  printf("%p", &arr[0]); // 0xA0
+  ```
+  `arr` decays into a pointer to its first element `&arr[0]`
+- Pointer arithmetic does works with `arr` variable:
+  ```c
+  printf("%p", p + 1); // 0xA4
+  
+  printf("%p", arr + 1); // 0xA4
+  
+  printf("%p", &arr[0] + 1); // 0xA4
+  
+  printf("%p", &arr + 1); // 0xB4 ??? 
+  
+  // &arr is in the type of int (*)[5] 
+  // so &arr + 1 jumps 5*sizeof(int) = 20 bytes instead of only 4 bytes
+  ```
+- `sizeof(p)` - size of the pointer p, `sizeof(arr)` - size of the array (= 5 * sizeof(int))
+
+### 2.5. String handling functions
+
+Remember to include the `<string.h>` header file 
+
+|Function|Description|
+|-|-|
+|`strlen(str)`|Returns the number of characters in the string, excluding the `\0`.|
+|`strcpy(dest, src)	`|Copies contents of src string to dest.|
+|`strncpy(dest, src, n)	`|Copies up to n characters from src to dest|
+|`strcat(dest, src)`|Appends src string to the end of dest.|
+|`strncat(dest, src, n)`|Appends up to n characters from src to dst.|
+|`strcmp(str1, str2)`|Compares two strings and returns 0 if equal.|
+|`strncmp(str1, str2, n)`|Compares up to n characters of two strings.|
+|`strchr(str, ch)`|Finds the first occurrence of character ch in string.|
+|`strrchr(str, ch)	`|Finds the last occurrence of character ch in string.|
+|`strstr(str, substr)`|Finds the first occurrence of substring in string.|
+|`strtok(str, delim)`|Splits string into tokens using delimiter.|
+|`memset(ptr, val, n)`|Fills memory with a specified value.|
+|`memcpy(dest, src, n)`|Copies n bytes from src to dest.|
+|`memcmp(ptr1, ptr2, n)`|Compares n bytes of two memory blocks.|
+
 ---
 
 ## 3. Structs, unions, and typedefs
