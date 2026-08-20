@@ -1,6 +1,19 @@
+# Section 2
+
 - **Section**: Linux System Programming
 - **Topic**: C Programming Language Review
 - **Duration**: 3 working days (8 hours/day) 
+
+## Table of Contents
+
+- [1. C Syntax Essentials](#1-c-syntax-essentials)
+- [2. Pointers and arrays](#2-pointers-and-arrays)
+- [3. Structs, unions, and typedefs](#3-structs-unions-and-typedefs)
+- [4. Dynamic memory management](#4-dynamic-memory-management)
+- [5. Compilation pipeline](#5-compilation-pipeline)
+- [6. Basic data structures](#6-basic-data-structures)
+- [7. Function pointers and callback-style APIs](#7-function-pointers-and-callback-style-apis)
+- [8. Lab](#8-lab)
 
 ## 1. C Syntax Essentials
 
@@ -134,7 +147,7 @@ Example:
 int num = 90;
 int *p = &num; // assuming 64-bit Systems, pointer p will take 8 bytes
 ```
-[![pointer1.png](http://10.0.0.220:9090/uploads/images/gallery/2026-08/scaled-1680-/pointer1.png)](http://10.0.0.220:9090/uploads/images/gallery/2026-08/pointer1.png)
+![pointer1.png](./img/pointer1.png)
 
 ### 2.2. Pointer manipulation
 
@@ -636,3 +649,35 @@ Example:
     // func_ptr(1, 2) is now equivalent to add(1, 2).
     printf("%d", func_ptr(1+2)); // Output: 3
     ```
+
+## 8. Lab 
+### Implement a singly linked list in C from scratch (insert/delete/traverse):
+
+[Source code](./lab/singly_linked_list.c)
+
+```C
+int main()
+{
+    Node* head = NULL;
+    insert_back(&head, 1);
+    insert_back(&head, 2);
+    insert_back(&head, 3);
+    insert_back(&head, 4);
+    insert_back(&head, 5);
+    insert_front(&head, 1000);
+
+    delete_node(&head, 3);
+    traverse_node(head, print_node); 
+    // Output: 1000 1 2 4 5
+}
+```
+Result:
+```bash
+dungvd@dungvd-asus:~/zhone-engineering-academy-lab/section-2/lab$ gcc singly_linked_list.c -o singly_linked_list
+dungvd@dungvd-asus:~/zhone-engineering-academy-lab/section-2/lab$ ./singly_linked_list 
+1000
+1
+2
+4
+5
+```
