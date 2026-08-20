@@ -650,6 +650,60 @@ Example:
     printf("%d", func_ptr(1+2)); // Output: 3
     ```
 
+### 7.2. Callback
+
+A callback is the process of **passing a function to another function** as an argument so that the receiving function can call it later.
+
+Example:
+```C
+#include <stdio.h>
+
+int add(int a, int b) { return a + b; }
+int subtract(int a, int b) { return a - b; }
+int multiply(int a, int b) { return a * b; }
+int divide(int a, int b) { return a / b; }
+
+void calculator(int a, int b, int (*callback)(int, int))
+{
+    printf("%d\n", callback(a, b));
+}
+
+int main(void)
+{
+    int a = 10, b = 2;
+    calculator(a, b, add);
+    calculator(a, b, subtract);
+    calculator(a, b, multiply);
+    calculator(a, b, divide);
+    return 0;
+}
+```
+Output:
+```
+12
+8
+20
+5
+```
+
+However writing a function pointer directly can become difficult to read:
+```C
+int (*callback)(int, int)
+```
+
+For callback-style APIs, we usually define a named callback type using typedef:
+```C
+typedef int (*OperationCallback)(int, int);
+```
+
+Now the API becomes easier to understand:
+```C
+void calculator(int a, int b, OperationCallback operation)
+{
+    printf("%d\n", operation(a, b));
+}
+```
+
 ## 8. Lab 
 
 ### Implement a singly linked list in C from scratch (insert/delete/traverse):
@@ -700,8 +754,21 @@ We do this experiment with the program above:
     ![gcc_assemblied.png](./img/gcc_assemblied.png)
 
 - Link: `gcc singly_linked_list.o -o singly_linked_list`
+    
     `singly_linked_list.o` is compiled into an executable file `singly_linked_list`, which can be execute by running this command:
     ```bash
     <path_to_file>/singly_linked_list
     ```
 
+### Write a small program that uses function pointers to implement a simple callback/dispatch table 
+
+[Source code](./lab/dispatch_table.c)
+
+```C
+dungvd@dungvd-asus:~/zhone-engineering-academy-lab/section-2/lab$ gcc dispatch_table.c -o dispatch_table
+dungvd@dungvd-asus:~/zhone-engineering-academy-lab/section-2/lab$ ./dispatch_table 
+12
+8
+20
+5
+```
