@@ -1,5 +1,3 @@
-# Section 2
-
 - **Section**: Linux System Programming
 - **Topic**: C Programming Language Review
 - **Duration**: 3 working days (8 hours/day) 
@@ -8,7 +6,7 @@
 
 ### 1.1. Variables
 
-### Syntax
+#### Syntax
 
 ``` C
 // Declare
@@ -26,7 +24,7 @@ age = 99;
 temperature = 20.04;
 ```
 
-### Data types
+#### Data types
 
 |Type|Meaning|Size
 |-|-|-|
@@ -82,8 +80,6 @@ do {
 
 ### 1.3. Functions
 
-#### Syntax
-
 Function declaration:
 ```
 return_type function_name(parametersType parameters);
@@ -119,6 +115,8 @@ printf("%d", result) // 8
 ```
 
 - return_type: The data type of the value the function returns (`int`, `float`). `void` if the function does not return any value
+
+---
 
 ## 2. Pointers and arrays
 
@@ -164,20 +162,20 @@ int16_t a[5] = {11, 22, 33, 44, 55};
 int16_t *p = &a[0];
 printf("%d\n", *p); // 11
 ```
-[![pointer2.png](http://10.0.0.220:9090/uploads/images/gallery/2026-08/scaled-1680-/pointer2.png)](http://10.0.0.220:9090/uploads/images/gallery/2026-08/pointer2.png)
+![pointer2.png](./img/pointer2.png)
 
 ```C
 p++;
 printf("%d\n", *p); // 22
 ```
 
-[![pointer3.png](http://10.0.0.220:9090/uploads/images/gallery/2026-08/scaled-1680-/pointer3.png)](http://10.0.0.220:9090/uploads/images/gallery/2026-08/pointer3.png)
+![pointer3.png](./img/pointer3.png)
 
 ```C
 p += 2;
 printf("%d\n", *p); // 44
 ```
-[![pointer4.png](http://10.0.0.220:9090/uploads/images/gallery/2026-08/scaled-1680-/pointer4.png)](http://10.0.0.220:9090/uploads/images/gallery/2026-08/pointer4.png)
+![pointer4.png](./img/pointer4.png)
 
 ### 2.3. Pointers to Pointers
 
@@ -191,13 +189,15 @@ char **q = &p;  // Type: pointer to pointer to char
 printf("%c %c\n", *p, **q);  // a a
 ```
 
-[![pointer5.png](http://10.0.0.220:9090/uploads/images/gallery/2026-08/scaled-1680-/pointer5.png)](http://10.0.0.220:9090/uploads/images/gallery/2026-08/pointer5.png)
+![pointer5.png](./img/pointer5.png)
 
 ```C
 **q = 'b' // change the value of the variable c through a two-star pointer
 
 printf("%c %c\n", *p, **q);  // b b
 ```
+
+---
 
 ## 3. Structs, unions, and typedefs
 
@@ -339,6 +339,8 @@ typedef struct {
 animal z;           // This works because "animal" is an alias
 ```
 
+---
+
 ## 4. Dynamic memory management
 
 ### 4.1. malloc()
@@ -435,6 +437,8 @@ for (int i = 0; i < 5; i++)
   printf("%d ", ptr[i]); // -1504568300 5 -1778696097 -377398520 0 
 ```
 
+---
+
 ## 5. Compilation pipeline
 
 `Source File -> Preprocessor -> Compiler -> Assembler -> Linker`
@@ -461,13 +465,174 @@ gcc -c main.s -o main.o   # Assemble
 gcc main.o -o main        # Link
 ```
 
-### Preprocessor
+### 5.1. Preprocessor
 
-### Compiler proper
+`gcc -E main.c -o main.i`
 
-### Assembler
+This phase includes:
+1. ***Removal of Comments***
 
-### Linker
+    `// This is a comment` and `/* This is also a comment */` 
+    will get removed.
+
+1. ***Expansion of Macros***
+
+    ```C
+    #define SIZE 10
+    
+    int arr[SIZE];
+    ```
+    turns into
+    ```C
+    int arr[10];
+    ```
+
+1. ***Expansion of the included files***
+
+    
+    ```C
+    //myheader.h
+    void foo(void);
+    ```
+    ```C
+    //main.c
+    #include "myheader.h"
+    
+    int main(void) {
+        int arr[MAX_SIZE];
+    }
+    ```
+    after preprocessing:
+    ```C
+    void foo(void);
+    
+    int main(void) {
+        int arr[MAX_SIZE];
+    }
+    ```
+
+1. ***Conditional compilation***
+
+    Preprocessor decides which parts of the code will be kept based on **Directives** such as:
+
+    ```C
+    #ifdef
+    #ifndef
+    #if
+    #elif
+    #else
+    #endif
+    ```
+    Example:
+    ```C
+    #define DEBUG
+    
+    #ifdef DEBUG
+        printf("Debug mode\n");
+    #else
+        printf("Release mode\n");
+    #endif
+    ```
+    turns into
+    ```
+    printf("Debug mode\n");
+    ```
+
+### 5.2. Compiler proper
+
+`gcc -S main.i -o main.s`
+
+The next step is to compile `main.i` and produce an intermediate compiled output file `main.s` (assembly-level instructions).
+
+### 5.3. Assembler
+
+`gcc -c main.s -o main.o`
+
+In this phase, the `main.s` is taken as input and turned into `main.o` by the assembler. It translates assembly instructions into binary machine code.
+
+### 5.4. Linker
+
+`gcc main.o -o main`
+
+In the final phase, linker combines multiple object files together and outputs the final executable file.
 
 ## 6. Basic data structures
+
+### 6.1. Singly linked lists
+
+A singly linked list is a dynamic linear data structure where each element, called a node, contains:
+
+- `data`: the value stored in the node
+- `next`: a pointer to the next node
+
+![singly_linked_list](./img/singlylinkedlists.svg)
+
+### 6.2. Doubly linked lists
+
+Same as singly linked lists, but nodes in doubly linked lists have references to their previous nodes. A node contains:
+
+- `prev`: a pointer to the previous node
+- `data`: the value stored in the node
+- `next`: a pointer to the next node
+
+![doubly_linked_list](./img/doublylinkedlists.svg)
+
+### 6.3. Stack
+- A stack is a linear data structure that follows the **LIFO** (Last In First Out) principle.
+- Can be implemented using an array or a singly linked list.
+
+![stack](./img/stack.jpeg)
+
+- Basic operations:
+  - `push()`: Add an element to the top.
+  - `pop()`: Remove the top element.
+  - `peek()`: View the top element without removing it.
+  - `isEmpty()`: Check whether the stack is empty.
+
+
+### 6.4. Queue
+- A queue is a linear data structure that follows the **FIFO** (First In First Out) principle.
+- Can be implemented using an array or a singly linked list.
+
+![queue](./img/queue.png)
+
+- Basic operations:
+  - `enqueue()`: Add an element to the rear.
+  - `dequeue()`: Remove an element from the front.
+  - `front()`: View the front element.
+  - `isEmpty()`: Check whether the queue is empty.
+
 ## 7. Function pointers and callback-style APIs
+
+### 7.1. Function pointers
+
+- Pointers store memory addresses. While pointers are commonly used with variables, they can also store the address of a function.
+- A function pointer is a pointer that stores the address of a function.
+- Usage:
+  - Calling functions indirectly
+  - Passing functions as arguments
+  - Implementing callbacks
+  - Creating function tables
+
+Example:
+
+  - We have a simple add function:
+    ```C
+    int add(int a, int b)
+    {
+        return a + b;
+    }
+    ```
+  - Declare a function pointer:
+    ```C
+    int (*func_ptr)(int, int);
+    ```
+  - Assign the address of the add function to func_ptr:
+    ```C
+    func_ptr = add;
+    ```
+  - Call the function through the function pointer:
+    ```C
+    // func_ptr(1, 2) is now equivalent to add(1, 2).
+    printf("%d", func_ptr(1+2)); // Output: 3
+    ```
