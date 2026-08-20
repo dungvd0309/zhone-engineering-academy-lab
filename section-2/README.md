@@ -651,6 +651,7 @@ Example:
     ```
 
 ## 8. Lab 
+
 ### Implement a singly linked list in C from scratch (insert/delete/traverse):
 
 [Source code](./lab/singly_linked_list.c)
@@ -681,3 +682,26 @@ dungvd@dungvd-asus:~/zhone-engineering-academy-lab/section-2/lab$ ./singly_linke
 4
 5
 ```
+
+### Compile a small program through each gcc stage (-E, -S, -c, then full link) and inspect the output of each stage:
+
+We do this experiment with the program above:
+
+- Preprocess: `gcc -E singly_linked_list.c -o singly_linked_list.i`
+
+    ![gcc_preprocessed.png](./img/gcc_preprocessed.png)
+
+- Compile: `gcc -S singly_linked_list.i -o singly_linked_list.s`
+
+    ![gcc_compiled.png](./img/gcc_compiled.png)
+
+- Assembly: `gcc -c singly_linked_list.s -o singly_linked_list.o`
+
+    ![gcc_assemblied.png](./img/gcc_assemblied.png)
+
+- Link: `gcc singly_linked_list.o -o singly_linked_list`
+    `singly_linked_list.o` is compiled into an executable file `singly_linked_list`, which can be execute by running this command:
+    ```bash
+    <path_to_file>/singly_linked_list
+    ```
+
