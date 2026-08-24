@@ -6,3 +6,4 @@ A repo for my notes, lab work in Zhone Engineering Academy 2026 program.
 
 - Section 1: Course Philosophy & Roadmap 
 - [Section 2: C Programming Language Review](./section-2)
+- [Section 3: Process Fundamentals, Memory Layout](./section-3/)
