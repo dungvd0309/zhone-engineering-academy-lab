@@ -394,11 +394,13 @@ there were no children to wait for, or –1 on error */
 |`si_uid`|This field contains the real user ID of the child. Most other UNIX implementations don’t set this field.|
 
 ### 4.4. Orphans and Zombies
-**Orphans** 
-- Child processes that lost their parents (parent processes got terminated, while the children didn't). 
-- The orphans are adopted by `init`, the ancestor of all processes, whose process ID is 1.
 
-**Zombies**
+#### Orphans
+- Child processes that lost their parents (parent processes got terminated, while the children didn't). 
+- The orphans are adopted by `init` process, the ancestor of all processes, whose PID is 1.
+
+
+#### Zombies
 -  A zombie is a child process that already exited, but whose parent hasn't called `wait()` yet to collect the result.
 
 ---
@@ -828,12 +830,204 @@ int clearenv(void)
 
 ## 10. Memory Layout of a C Program (text/data/bss/heap/stack)
 
+![memory_management.png](./img/memory_management.png)
+
+|Segment|Description|
+|-|-|
+|Text|- Program instructions/code <br>- Read-only|
+|Data|- Initialized global/static variables|
+|BSS|- Uninitialized global/static variables|
+|Heap|- is an area for dynamic allocation at run time. <br>- `malloc()`, `calloc()`, `realloc()`|
+|Stack|- is a dynamically growing and shrinking segment containing stack frame. <br>- One stack frame is allocated for each currently called function. <br> - function's local variables, arguments, and return value|
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+char globBuf[65536]; /* Uninitialized data segment */
+int primes[] = { 2, 3, 5, 7 }; /* Initialized data segment */
+
+static int square(int x) /* Allocated in frame for square() */
+{
+  int result; /* Allocated in frame for square() */
+
+  result = x * x;
+  return result; /* Return value passed via register */
+}
+
+static void doCalc(int val) /* Allocated in frame for doCalc() */
+{
+  printf("The square of %d is %d\n", val, square(val));
+
+  if (val < 1000) {
+    int t; /* Allocated in frame for doCalc() */
+
+    t = val * val * val;
+    printf("The cube of %d is %d\n", val, t);
+  }
+}
+int main(int argc, char *argv[]) /* Allocated in frame for main() */
+{
+  static int key = 9973; /* Initialized data segment */
+  static char mbuf[10240000]; /* Uninitialized data segment */
+  char *p; /* Allocated in frame for main() */
+
+  p = malloc(1024); /* Points to memory in heap segment */
+
+  doCalc(key);
+  exit(EXIT_SUCCESS);
+}
+```
+
 ## 11. Shared Libraries: static vs. dynamic linking
+
+> **section 41**
+
+Shared libraries are a technique for placing library functions into a single unit that can be shared by multiple processes at run time.
+
+This technique can save both disk space and RAM.
 
 ## 12. getrlimit and setrlimit Functions (resource limits)
 
+> **section 36**
+
+```c
+#include <sys/resource.h>
+
+int getrlimit(int resource, struct rlimit *rlim);
+int setrlimit(int resource, const struct rlimit *rlim);
+
+/* Both return 0 on success, or –1 on error */
+```
+```c
+struct rlimit {
+  rlim_t rlim_cur; /* Soft limit (actual process limit) */
+  rlim_t rlim_max; /* Hard limit (ceiling for rlim_cur) */
+};
+```
+
+| resource | Limit on | SUSv3 |
+|---|---|:---:|
+| `RLIMIT_AS` | Process virtual memory size (bytes) | • |
+| `RLIMIT_CORE` | Core file size (bytes) | • |
+| `RLIMIT_CPU` | CPU time (seconds) | • |
+| `RLIMIT_DATA` | Process data segment (bytes) | • |
+| `RLIMIT_FSIZE` | File size (bytes) | • |
+| `RLIMIT_MEMLOCK` | Locked memory (bytes) | |
+| `RLIMIT_MSGQUEUE` | Bytes allocated for POSIX message queues for real user ID (since Linux 2.6.8) | |
+| `RLIMIT_NICE` | Nice value (since Linux 2.6.12) | |
+| `RLIMIT_NOFILE` | Maximum file descriptor number plus one | • |
+| `RLIMIT_NPROC` | Number of processes for real user ID | |
+| `RLIMIT_RSS` | Resident set size (bytes; not implemented) | |
+| `RLIMIT_RTPRIO` | Realtime scheduling priority (since Linux 2.6.12) | |
+| `RLIMIT_RTTIME` | Realtime CPU time (microseconds; since Linux 2.6.25) | |
+| `RLIMIT_SIGPENDING` | Number of queued signals for real user ID (since Linux 2.6.8) | |
+| `RLIMIT_STACK` | Size of stack segment (bytes) | • |
+
 ## 13. ELF format, symbol table, relocation - supplementary linking concepts
+
+> Section 45.9: "IPC Hardware Limits and IPC_INFO" (or nonstandard IPC control operations) under Chapter 45: Introduction to System V IPC
 
 ## 14. Stack frame layout (System V AMD64 ABI): prologue/epilogue, %rbp/%rsp, register- vs. stack-passed arguments, the 128-byte red zone
 
+> The Stack frame layout (System V AMD64 ABI)—including prologue/epilogue, %rbp/%rsp register usage, argument passing (register vs. stack), and the 128-byte red zone—is not detailed in the provided book excerpt.  The text briefly introduces basic stack concept concepts on x86-32 architecture in Section 6.5: "The Stack and Stack Frames" (page 121), but it does not cover the System V AMD64 ABI details, register calling conventions, or the red zone
+
 ## 15. Reading compiler-generated Assembly (gcc -S / objdump -d) to identify a function's own stack frame
+
+> The topic of inspecting compiler-generated Assembly (using gcc -S or objdump -d) to examine a function's stack frame is briefly mentioned in Section 6.8: "Performing a Nonlocal Goto: setjmp() and longjmp()" (specifically in the callout/note on page 136).  It appears under the section discussing how compiler optimizations affect local variables during a longjmp(), where the text notes:  "It is instructive to look at the assembler output produced when compiling the setjmp_vars.c program both with and without optimization. The cc -S command produces a file with the extension .s containing the generated assembler code for a program."  
+
+## 16. Lab 
+
+### Lab 1
+Write a program using fork/exec/wait/waitpid; observe zombie and orphan processes 
+
+[Lab 1 link](./lab/lab_1.c)
+
+**Diagram**:
+
+![lab_1_diagram.png](./img/lab_1_diagram.png)
+
+**Observation**:
+
+At first, the parent process `fork()` to create a child process, then the child `fork()` to create a grandchild.
+
+```bash
+$ ./lab_1
+[Parent process] PID: 36160, PPID: 7611, Time: 0
+[Child process] PID: 36161, PPID: 36160, Time: 0
+[Grandchild] PID: 36162, PPID: 36161, Time: 0
+...
+```
+
+```bash
+$ ps aux | grep lab_1
+dungvd     36160  0.0  0.0   2692  1732 pts/1    S+   10:13   0:00 ./lab_1
+dungvd     36161  0.0  0.0   2692  1000 pts/1    S+   10:13   0:00 ./lab_1
+dungvd     36162  0.0  0.0   2692  1000 pts/1    S+   10:13   0:00 ./lab_1
+```
+
+After 5 seconds, the child exited then became a zombie. Since its parent (`PID 36160`) hadn't waited for it yet. The grandchild became an orphan because its parent (`PID 36161`) exited, then got adopted by the *user systemd* (`PID 2217`):
+```
+...
+[Grandchild] PID: 36162, PPID: 36161, Time: 6
+Child process - PID 36161 exiting
+[Parent process] PID: 36160, PPID: 7611, Time: 8
+[Grandchild] PID: 36162, PPID: 2217, Time: 8
+...
+```
+
+```bash
+$ ps aux | grep lab_1
+dungvd     36160  0.0  0.0   2692  1732 pts/1    S+   10:13   0:00 ./lab_1
+dungvd     36161  0.0  0.0      0     0 pts/1    Z+   10:13   0:00 [lab_1] <defunct>
+dungvd     36162  0.0  0.0   2692  1000 pts/1    S+   10:13   0:00 ./lab_1
+
+$ ps aux | grep 2217
+dungvd      2217  0.0  0.1  21332  9876 ?        Ss   08:22   0:00 /usr/lib/systemd/systemd --user
+```
+
+After sleep for 30 seconds, the grandchild did a `execlp()` to run `echo` command then exited. The *user systemd* handled the grandchild exit:
+
+```
+...
+Bye!!! Grandchild process using execlp to echo
+[Parent process] PID: 36160, PPID: 7611, Time: 32
+[Parent process] PID: 36160, PPID: 7611, Time: 34
+[Parent process] PID: 36160, PPID: 7611, Time: 36
+...
+```
+```bash
+$ ps aux | grep lab_1
+dungvd     36160  0.0  0.0   2692  1732 pts/1    S+   10:13   0:00 ./lab_1
+dungvd     36161  0.0  0.0      0     0 pts/1    Z+   10:13   0:00 [lab_1] <defunct>
+```
+
+After that, the parent waited for the child. The child was no longer a zombie:
+```
+...
+[Parent process] PID: 36160, PPID: 7611, Time: 58
+parent waited!
+[Parent process] PID: 36160, PPID: 7611, Time: 0
+[Parent process] PID: 36160, PPID: 7611, Time: 2
+...
+```
+
+```bash
+$ ps aux | grep lab_1
+dungvd     36160  0.0  0.0   2692  1732 pts/1    S+   10:13   0:00 ./lab_1
+```
+
+Finally, the parent exited:
+```
+...
+[Parent process] PID: 36160, PPID: 7611, Time: 4
+Parent process - PID 36160 exiting
+```
+
+```bash
+$ ps aux | grep lab_1
+
+```
+
+### Lab 2
+
+### Lab 3
