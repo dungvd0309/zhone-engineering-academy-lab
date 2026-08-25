@@ -1174,4 +1174,63 @@ The two processes race because both the parent and child become runnable after `
 
 ### Lab 3
 
+Use ps -o pid,ppid,pgid,sid to observe the process group/session of the program just written 
+
+[Lab 3 link](./lab/lab_3.c)
+
+We have a pretty simple program for this experiment:
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main()
+{
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        printf("[Child] PID: %d, PPID: %d\n", getpid(), getppid());
+        sleep(100);
+        exit(EXIT_SUCCESS);
+    }
+    printf("[Parent] PID: %d\n", getpid());
+    wait(NULL);
+    exit(EXIT_SUCCESS);
+}
+```
+
+```bash
+$ ./lab_3
+[Parent] PID: 137765
+[Child] PID: 137766, PPID: 137765
+```
+**Observation**:
+
+Inspecting the parent process:
+```bash
+$ ps -o pid,ppid,pgid,sid,comm 137765
+    PID    PPID    PGID     SID COMMAND
+ 137765    7611  137765    7611 lab_3
+```
+- The parent is the process group leader since its PID == its PGID.
+- It has the SID == `bash`'s PID => `bash` is the session leader.
+  ```bash
+  $ ps -o pid,ppid,pgid,sid,comm 7611
+      PID    PPID    PGID     SID COMMAND
+    7611    7413    7611    7611 bash
+  ```
+
+Inspecting the child process:
+```bash
+$ ps -o pid,ppid,pgid,sid,comm 137766
+    PID    PPID    PGID     SID COMMAND
+ 137766  137765  137765    7611 lab_3
+```
+- After `fork()`, the child inherits PGID and SID from the parent.
+
 ### Lab 4
+
+Write a program that prints the addresses of its own memory regions (text/data/bss/heap/stack) 
+
