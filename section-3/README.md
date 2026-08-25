@@ -603,9 +603,38 @@ Identified by a *session identifier* (SID).
 - Whose process ID becomes the session ID
 - A new process inherits its parent’s session ID
 
+```c
+#define _XOPEN_SOURCE 500
+#include <unistd.h>
+
+pid_t getsid(pid_t pid);
+
+/* Returns session ID of specified process, or (pid_t) –1 on error */
+```
+
+```c
+#include <unistd.h>
+
+pid_t setsid(void);
+
+/* Returns session ID of new session, or (pid_t) –1 on error */
+```
+
 ### 8.3. Controlling Terminal
 
 A *controlling terminal* is a terminal device associated with a session that manages terminal-based processes and handles job control, signals, and session lifetimes.
+
+A terminal may be the controlling terminal for at most one session.
+
+Obtaining a pathname that refers to the controlling terminal:
+```c
+#include <stdio.h> /* Defines L_ctermid constant */
+
+char *ctermid(char *ttyname);
+
+/* Returns pointer to string containing pathname of controlling terminal,
+or NULL if pathname could not be determined */
+```
 
 ### 8.4. Job Control
 
