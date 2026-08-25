@@ -856,7 +856,7 @@ int clearenv(void)
 
 /* Returns 0 on success, or –1 on error */
 ```
-
+---
 ## 10. Memory Layout of a C Program (text/data/bss/heap/stack)
 
 ![memory_management.png](./img/memory_management.png)
@@ -906,7 +906,7 @@ int main(int argc, char *argv[]) /* Allocated in frame for main() */
   exit(EXIT_SUCCESS);
 }
 ```
-
+---
 ## 11. Shared Libraries: static vs. dynamic linking
 
 > **section 41**
@@ -915,9 +915,10 @@ Shared libraries are a technique for placing library functions into a single uni
 
 This technique can save both disk space and RAM.
 
+---
 ## 12. getrlimit and setrlimit Functions (resource limits)
 
-> **section 36**
+To get and set resource limits for a process, we use `getrlimit()` and `setrlimit()`.
 
 ```c
 #include <sys/resource.h>
@@ -954,7 +955,27 @@ struct rlimit {
 
 ## 13. ELF format, symbol table, relocation - supplementary linking concepts
 
-> Section 45.9: "IPC Hardware Limits and IPC_INFO" (or nonstandard IPC control operations) under Chapter 45: Introduction to System V IPC
+### 13.1. ELF format
+
+Executable and Linkable Format (ELF), is the default binary format on Linux-based systems.
+
+![ELF](https://i.imgur.com/Ai9OqOB.png)
+
+Each ELF file is made up of:
+- **ELF header**: defines info about the ELF file
+- File data:
+  - **Program header table**: describes zero or more memory segments.
+  - **Section header table**: describes zero or more sections.
+  - Data referred to by entries in the **program header table** or **section header table**
+
+
+#### Executable Headers (Ehdr)
+
+This is the only part of the ELF that must be in an specific location (at the starting of the ELF file).
+
+It defines basic information about the ELF file.
+
+#### Section Headers (Shdr)
 
 ## 14. Stack frame layout (System V AMD64 ABI): prologue/epilogue, %rbp/%rsp, register- vs. stack-passed arguments, the 128-byte red zone
 
@@ -1059,4 +1080,98 @@ $ ps aux | grep lab_1
 
 ### Lab 2
 
+Reproduce a race condition between fork and exec, explain it, and fix it 
+
+[Lab 2 link](./lab/lab_2.c)
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main(void) {
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        usleep(100000);
+
+        printf("Child: Hello!\n");
+        fflush(stdout);
+
+        exit(0);
+    }
+
+    usleep(100000);
+
+    printf("Parent: kill()\n");
+    fflush(stdout);
+    kill(pid, SIGKILL);
+
+    waitpid(pid, NULL, 0);
+}
+```
+
+This program includes 2 processes:
+- The parent process sleeps for 100000 us then kill the child process.
+- The child process sleeps for 100000 us then print "Child: Hello".
+
+Run this program for 20 times:
+```bash
+$ for i in {1..20}; do
+    echo "===== Run $i ====="
+    ./lab_2
+done
+```
+```
+===== Run 1 =====
+Parent: kill()
+===== Run 2 =====
+Parent: kill()
+===== Run 3 =====
+Parent: kill()
+===== Run 4 =====
+Parent: kill()
+===== Run 5 =====
+Parent: kill()
+===== Run 6 =====
+Parent: kill()
+===== Run 7 =====
+Parent: kill()
+===== Run 8 =====
+Parent: kill()
+===== Run 9 =====
+Parent: kill()
+===== Run 10 =====
+Parent: kill()
+===== Run 11 =====
+Parent: kill()
+Child: Hello!
+===== Run 12 =====
+Parent: kill()
+===== Run 13 =====
+Parent: kill()
+===== Run 14 =====
+Parent: kill()
+===== Run 15 =====
+Parent: kill()
+===== Run 16 =====
+Parent: kill()
+===== Run 17 =====
+Parent: kill()
+===== Run 18 =====
+Parent: kill()
+===== Run 19 =====
+Parent: kill()
+===== Run 20 =====
+Parent: kill()
+Child: Hello!
+```
+
+The two processes race because both the parent and child become runnable after `fork()` and their next actions can happen in different orders.
+
 ### Lab 3
+
+### Lab 4
