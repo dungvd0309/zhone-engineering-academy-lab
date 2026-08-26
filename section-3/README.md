@@ -969,13 +969,90 @@ Each ELF file is made up of:
   - Data referred to by entries in the **program header table** or **section header table**
 
 
-#### Executable Headers (Ehdr)
+### 13.2. Symbol table
 
-This is the only part of the ELF that must be in an specific location (at the starting of the ELF file).
+[Reference](https://refspecs.linuxbase.org/elf/gabi4+/ch4.symtab.html)
 
-It defines basic information about the ELF file.
+`.symtab`
 
-#### Section Headers (Shdr)
+Symbol: variables, functions, labels, types, etc.
+
+Symbol table: holds information needed to locate and relocate a program's symbolic definitions and references.
+
+```c
+typedef struct {
+	Elf32_Word	st_name;
+	Elf32_Addr	st_value;
+	Elf32_Word	st_size;
+	unsigned char	st_info;
+	unsigned char	st_other;
+	Elf32_Half	st_shndx;
+} Elf32_Sym;
+```
+```c
+typedef struct {
+	Elf64_Word	st_name;
+	unsigned char	st_info;
+	unsigned char	st_other;
+	Elf64_Half	st_shndx;
+	Elf64_Addr	st_value;
+	Elf64_Xword	st_size;
+} Elf64_Sym;
+```
+
+- `st_name`: 
+  - holds an index into the object file's **symbol string table** (`.strtab` - a storage for all symbo names)
+  - holds the character representations of the symbol names.
+- `st_value`:
+  - This member gives the value of the associated symbol.
+  - Before linking (in a `.o` file): holds an offset from the beginning of the section that the symbol is defined in (section index defined in `st_shndx`)
+  - After linking (in the final `.elf`): holds the actual virtual address where the symbol resides 
+- `st_size`:
+  - Holds associated size of the symbol.
+  - Holds 0 if the symbol has no size or an unknown size
+- `st_info`:
+  - Specifies the symbol's type and binding attributes
+    - Binding: local, global, weak
+    - Type: object, function, section, file
+
+- `st_other`:
+  - Visibility of the symbol: `STV_DEFAULT`, `STV_INTERNAL`, `STV_HIDDEN`, `STV_PROTECTED`
+
+- `st_shndx`:
+  - holds an index into the section header table.
+  - tells which section this sysbol lives in.
+
+### 13.3. Relocation
+
+[Reference](https://refspecs.linuxbase.org/elf/gabi4+/ch4.reloc.html)
+
+Relocation is the process of connecting symbolic references with symbolic definitions.
+
+```c
+typedef struct {
+	Elf32_Addr	r_offset;
+	Elf32_Word	r_info;
+} Elf32_Rel;
+
+typedef struct {
+	Elf32_Addr	r_offset;
+	Elf32_Word	r_info;
+	Elf32_Sword	r_addend;
+} Elf32_Rela;
+```
+
+```c
+typedef struct {
+	Elf64_Addr	r_offset;
+	Elf64_Xword	r_info;
+} Elf64_Rel;
+
+typedef struct {
+	Elf64_Addr	r_offset;
+	Elf64_Xword	r_info;
+	Elf64_Sxword	r_addend;
+} Elf64_Rela;
+```
 
 ## 14. Stack frame layout (System V AMD64 ABI): prologue/epilogue, %rbp/%rsp, register- vs. stack-passed arguments, the 128-byte red zone
 
@@ -1233,4 +1310,76 @@ $ ps -o pid,ppid,pgid,sid,comm 137766
 ### Lab 4
 
 Write a program that prints the addresses of its own memory regions (text/data/bss/heap/stack) 
+
+[Lab 4 link](./lab/lab_4.c)
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int global_initialized_var = 42; /* Data - Initialized global variable */
+
+int global_uninitialized_var; /* BSS - Uninitialized global variable */
+
+void some_function(void) { /* Text - Function code */
+    printf("Inside some_function\n");
+}
+
+int main(int argc, char *argv[]) {
+    int stack_var = 10;                 /* Stack - Local variable */
+    static int static_var = 100;        /* Data - Initialized static variable */
+    int *heap_var = malloc(sizeof(int)); /* Heap - Dynamically allocated variable */
+    *heap_var = 5;
+
+    printf("Text (code) segment:\n");
+    printf("  main function       : %p\n", (void *)main);
+    printf("  some_function       : %p\n\n", (void *)some_function);
+
+    printf("Data segment (initialized):\n");
+    printf("  global_initialized_var : %p\n", (void *)&global_initialized_var);
+    printf("  static_var (in main)   : %p\n\n", (void *)&static_var);
+
+    printf("BSS segment (uninitialized):\n");
+    printf("  global_uninitialized_var: %p\n\n", (void *)&global_uninitialized_var);
+
+    printf("Heap segment:\n");
+    printf("  heap_var (malloc'd) : %p\n\n", (void *)heap_var);
+
+    printf("Stack segment:\n");
+    printf("  stack_var (local)   : %p\n", (void *)&stack_var);
+    printf("  argv pointer        : %p\n\n", (void *)argv);
+
+    printf("Environment variables:\n");
+    extern char **environ;
+    printf("  environ[0]          : %p\n\n", (void *)environ[0]);
+
+    free(heap_var);
+    return 0;
+}
+```
+
+Output:
+
+```
+Text (code) segment:
+  main function       : 0x57b646a4e1e3
+  some_function       : 0x57b646a4e1c9
+
+Data segment (initialized):
+  global_initialized_var : 0x57b646a51010
+  static_var (in main)   : 0x57b646a51014
+
+BSS segment (uninitialized):
+  global_uninitialized_var: 0x57b646a51024
+
+Heap segment:
+  heap_var (malloc'd) : 0x57b65f39f2a0
+
+Stack segment:
+  stack_var (local)   : 0x7fff060298ac
+  argv pointer        : 0x7fff060299e8
+
+Environment variables:
+  environ[0]          : 0x7fff0602bd8a
+```
 
