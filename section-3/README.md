@@ -1054,6 +1054,7 @@ typedef struct {
 } Elf64_Rela;
 ```
 
+---
 ## 14. Stack frame layout (System V AMD64 ABI): prologue/epilogue, %rbp/%rsp, register- vs. stack-passed arguments, the 128-byte red zone
 
 > The Stack frame layout (System V AMD64 ABI)—including prologue/epilogue, %rbp/%rsp register usage, argument passing (register vs. stack), and the 128-byte red zone—is not detailed in the provided book excerpt.  The text briefly introduces basic stack concept concepts on x86-32 architecture in Section 6.5: "The Stack and Stack Frames" (page 121), but it does not cover the System V AMD64 ABI details, register calling conventions, or the red zone
@@ -1383,3 +1384,359 @@ Environment variables:
   environ[0]          : 0x7fff0602bd8a
 ```
 
+### Lab 5
+
+Use nm/readelf/ldd/objdump to inspect a self-written binary and produce a short report
+
+We use the binary from lab 4 for this experiment
+
+#### ELF Header
+```bash
+$ readelf -h lab_4
+```
+```
+ELF Header:
+ Header:
+  Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF64
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              DYN (Position-Independent Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Version:                           0x1
+  Entry point address:               0x10e0
+  Start of program headers:          64 (bytes into file)
+  Start of section headers:          14400 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               64 (bytes)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         13
+  Size of section headers:           64 (bytes)
+  Number of section headers:         31
+  Section header string table index: 30
+```
+
+#### Program headers
+```bash
+$ readelf -l lab_4
+```
+```
+Elf file type is DYN (Position-Independent Executable file)
+Entry point 0x10e0
+There are 13 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  PHDR           0x0000000000000040 0x0000000000000040 0x0000000000000040
+                 0x00000000000002d8 0x00000000000002d8  R      0x8
+  INTERP         0x0000000000000318 0x0000000000000318 0x0000000000000318
+                 0x000000000000001c 0x000000000000001c  R      0x1
+      [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+  LOAD           0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000788 0x0000000000000788  R      0x1000
+  LOAD           0x0000000000001000 0x0000000000001000 0x0000000000001000
+                 0x00000000000003bd 0x00000000000003bd  R E    0x1000
+  LOAD           0x0000000000002000 0x0000000000002000 0x0000000000002000
+                 0x00000000000002bc 0x00000000000002bc  R      0x1000
+  LOAD           0x0000000000002d98 0x0000000000003d98 0x0000000000003d98
+                 0x0000000000000280 0x0000000000000290  RW     0x1000
+  DYNAMIC        0x0000000000002da8 0x0000000000003da8 0x0000000000003da8
+                 0x00000000000001f0 0x00000000000001f0  RW     0x8
+  NOTE           0x0000000000000338 0x0000000000000338 0x0000000000000338
+                 0x0000000000000030 0x0000000000000030  R      0x8
+  NOTE           0x0000000000000368 0x0000000000000368 0x0000000000000368
+                 0x0000000000000044 0x0000000000000044  R      0x4
+  GNU_PROPERTY   0x0000000000000338 0x0000000000000338 0x0000000000000338
+                 0x0000000000000030 0x0000000000000030  R      0x8
+  GNU_EH_FRAME   0x00000000000021b0 0x00000000000021b0 0x00000000000021b0
+                 0x000000000000003c 0x000000000000003c  R      0x4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     0x10
+  GNU_RELRO      0x0000000000002d98 0x0000000000003d98 0x0000000000003d98
+                 0x0000000000000268 0x0000000000000268  R      0x1
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     
+   01     .interp 
+   02     .interp .note.gnu.property .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt 
+   03     .init .plt .plt.got .plt.sec .text .fini 
+   04     .rodata .eh_frame_hdr .eh_frame 
+   05     .init_array .fini_array .dynamic .got .data .bss 
+   06     .dynamic 
+   07     .note.gnu.property 
+   08     .note.gnu.build-id .note.ABI-tag 
+   09     .note.gnu.property 
+   10     .eh_frame_hdr 
+   11     
+   12     .init_array .fini_array .dynamic .got 
+```
+
+#### Section headers
+```bash
+$ readelf -S lab_4
+```
+```
+There are 31 section headers, starting at offset 0x3840:
+
+Section Headers:
+  [Nr] Name              Type             Address           Offset
+       Size              EntSize          Flags  Link  Info  Align
+  [ 0]                   NULL             0000000000000000  00000000
+       0000000000000000  0000000000000000           0     0     0
+  [ 1] .interp           PROGBITS         0000000000000318  00000318
+       000000000000001c  0000000000000000   A       0     0     1
+  [ 2] .note.gnu.pr[...] NOTE             0000000000000338  00000338
+       0000000000000030  0000000000000000   A       0     0     8
+  [ 3] .note.gnu.bu[...] NOTE             0000000000000368  00000368
+       0000000000000024  0000000000000000   A       0     0     4
+  [ 4] .note.ABI-tag     NOTE             000000000000038c  0000038c
+       0000000000000020  0000000000000000   A       0     0     4
+  [ 5] .gnu.hash         GNU_HASH         00000000000003b0  000003b0
+       0000000000000030  0000000000000000   A       6     0     8
+  [ 6] .dynsym           DYNSYM           00000000000003e0  000003e0
+       0000000000000138  0000000000000018   A       7     1     8
+  [ 7] .dynstr           STRTAB           0000000000000518  00000518
+       00000000000000c5  0000000000000000   A       0     0     1
+  [ 8] .gnu.version      VERSYM           00000000000005de  000005de
+       000000000000001a  0000000000000002   A       6     0     2
+  [ 9] .gnu.version_r    VERNEED          00000000000005f8  000005f8
+       0000000000000040  0000000000000000   A       7     1     8
+  [10] .rela.dyn         RELA             0000000000000638  00000638
+       00000000000000d8  0000000000000018   A       6     0     8
+  [11] .rela.plt         RELA             0000000000000710  00000710
+       0000000000000078  0000000000000018  AI       6    24     8
+  [12] .init             PROGBITS         0000000000001000  00001000
+       000000000000001b  0000000000000000  AX       0     0     4
+  [13] .plt              PROGBITS         0000000000001020  00001020
+       0000000000000060  0000000000000010  AX       0     0     16
+  [14] .plt.got          PROGBITS         0000000000001080  00001080
+       0000000000000010  0000000000000010  AX       0     0     16
+  [15] .plt.sec          PROGBITS         0000000000001090  00001090
+       0000000000000050  0000000000000010  AX       0     0     16
+  [16] .text             PROGBITS         00000000000010e0  000010e0
+       00000000000002cd  0000000000000000  AX       0     0     16
+  [17] .fini             PROGBITS         00000000000013b0  000013b0
+       000000000000000d  0000000000000000  AX       0     0     4
+  [18] .rodata           PROGBITS         0000000000002000  00002000
+       00000000000001b0  0000000000000000   A       0     0     8
+  [19] .eh_frame_hdr     PROGBITS         00000000000021b0  000021b0
+       000000000000003c  0000000000000000   A       0     0     4
+  [20] .eh_frame         PROGBITS         00000000000021f0  000021f0
+       00000000000000cc  0000000000000000   A       0     0     8
+  [21] .init_array       INIT_ARRAY       0000000000003d98  00002d98
+       0000000000000008  0000000000000008  WA       0     0     8
+  [22] .fini_array       FINI_ARRAY       0000000000003da0  00002da0
+       0000000000000008  0000000000000008  WA       0     0     8
+  [23] .dynamic          DYNAMIC          0000000000003da8  00002da8
+       00000000000001f0  0000000000000010  WA       7     0     8
+  [24] .got              PROGBITS         0000000000003f98  00002f98
+       0000000000000068  0000000000000008  WA       0     0     8
+  [25] .data             PROGBITS         0000000000004000  00003000
+       0000000000000018  0000000000000000  WA       0     0     8
+  [26] .bss              NOBITS           0000000000004018  00003018
+       0000000000000010  0000000000000000  WA       0     0     8
+  [27] .comment          PROGBITS         0000000000000000  00003018
+       000000000000002d  0000000000000001  MS       0     0     1
+  [28] .symtab           SYMTAB           0000000000000000  00003048
+       0000000000000450  0000000000000018          29    19     8
+  [29] .strtab           STRTAB           0000000000000000  00003498
+       000000000000028e  0000000000000000           0     0     1
+  [30] .shstrtab         STRTAB           0000000000000000  00003726
+       000000000000011a  0000000000000000           0     0     1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  D (mbind), l (large), p (processor specific)
+```
+
+#### Symbol table
+
+```bash
+$ nm lab_4
+```
+```
+000000000000038c r __abi_tag
+0000000000004018 B __bss_start
+0000000000004020 b completed.0
+                 w __cxa_finalize@GLIBC_2.2.5
+0000000000004000 D __data_start
+0000000000004000 W data_start
+0000000000001110 t deregister_tm_clones
+0000000000001180 t __do_global_dtors_aux
+0000000000003da0 d __do_global_dtors_aux_fini_array_entry
+0000000000004008 D __dso_handle
+0000000000003da8 d _DYNAMIC
+0000000000004018 D _edata
+0000000000004028 B _end
+0000000000004018 B __environ@GLIBC_2.2.5
+0000000000004018 V environ@GLIBC_2.2.5
+00000000000013b0 T _fini
+00000000000011c0 t frame_dummy
+0000000000003d98 d __frame_dummy_init_array_entry
+00000000000022b8 r __FRAME_END__
+                 U free@GLIBC_2.2.5
+0000000000004010 D global_initialized_var
+0000000000003f98 d _GLOBAL_OFFSET_TABLE_
+0000000000004024 B global_uninitialized_var
+                 w __gmon_start__
+00000000000021b0 r __GNU_EH_FRAME_HDR
+0000000000001000 T _init
+0000000000002000 R _IO_stdin_used
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U __libc_start_main@GLIBC_2.34
+00000000000011e3 T main
+                 U malloc@GLIBC_2.2.5
+                 U printf@GLIBC_2.2.5
+                 U puts@GLIBC_2.2.5
+0000000000001140 t register_tm_clones
+00000000000011c9 T some_function
+                 U __stack_chk_fail@GLIBC_2.4
+00000000000010e0 T _start
+0000000000004014 d static_var.0
+0000000000004018 D __TMC_END__
+```
+
+We can find our own symbols:
+```
+00000000000011e3 T main
+00000000000011c9 T some_function
+
+0000000000004010 D global_initialized_var
+0000000000004024 B global_uninitialized_var
+
+0000000000004014 d static_var.0
+```
+|Name|Type|Desc|
+|-|-|-|
+|`main`|T|`.text`|
+|`some_function`|T|`.text`|
+|`global_initialized_var`|D|global symbol in `.data`|
+|`global_uninitialized_var`|B|`.bss`|
+|`static_var.0`|d|static local in `.data`|
+
+External functions:
+```
+                U malloc@GLIBC_2.2.5
+                U free@GLIBC_2.2.5
+                U printf@GLIBC_2.2.5
+                U puts@GLIBC_2.2.5
+```
+- `U` means Undefined, since the program called those functions but didn't define them.
+
+More details with `readelf -s`:
+```bash
+$ readelf -s lab_4
+```
+```
+Symbol table '.dynsym' contains 13 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND free@GLIBC_2.2.5 (2)
+     2: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND _[...]@GLIBC_2.34 (3)
+     3: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterT[...]
+     4: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND puts@GLIBC_2.2.5 (2)
+     5: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __[...]@GLIBC_2.4 (4)
+     6: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     7: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+     8: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+     9: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMC[...]
+    10: 0000000000004018     8 OBJECT  WEAK   DEFAULT   26 [...]@GLIBC_2.2.5 (2)
+    11: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND [...]@GLIBC_2.2.5 (2)
+    12: 0000000000004018     8 OBJECT  GLOBAL DEFAULT   26 [...]@GLIBC_2.2.5 (2)
+
+Symbol table '.symtab' contains 46 entries:
+   Num:    Value          Size Type    Bind   Vis      Ndx Name
+     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS Scrt1.o
+     2: 000000000000038c    32 OBJECT  LOCAL  DEFAULT    4 __abi_tag
+     3: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS crtstuff.c
+     4: 0000000000001110     0 FUNC    LOCAL  DEFAULT   16 deregister_tm_clones
+     5: 0000000000001140     0 FUNC    LOCAL  DEFAULT   16 register_tm_clones
+     6: 0000000000001180     0 FUNC    LOCAL  DEFAULT   16 __do_global_dtors_aux
+     7: 0000000000004020     1 OBJECT  LOCAL  DEFAULT   26 completed.0
+     8: 0000000000003da0     0 OBJECT  LOCAL  DEFAULT   22 __do_global_dtor[...]
+     9: 00000000000011c0     0 FUNC    LOCAL  DEFAULT   16 frame_dummy
+    10: 0000000000003d98     0 OBJECT  LOCAL  DEFAULT   21 __frame_dummy_in[...]
+    11: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS lab_4.c
+    12: 0000000000004014     4 OBJECT  LOCAL  DEFAULT   25 static_var.0
+    13: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS crtstuff.c
+    14: 00000000000022b8     0 OBJECT  LOCAL  DEFAULT   20 __FRAME_END__
+    15: 0000000000000000     0 FILE    LOCAL  DEFAULT  ABS 
+    16: 0000000000003da8     0 OBJECT  LOCAL  DEFAULT   23 _DYNAMIC
+    17: 00000000000021b0     0 NOTYPE  LOCAL  DEFAULT   19 __GNU_EH_FRAME_HDR
+    18: 0000000000003f98     0 OBJECT  LOCAL  DEFAULT   24 _GLOBAL_OFFSET_TABLE_
+    19: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND free@GLIBC_2.2.5
+    20: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __libc_start_mai[...]
+    21: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterT[...]
+    22: 0000000000004000     0 NOTYPE  WEAK   DEFAULT   25 data_start
+    23: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND puts@GLIBC_2.2.5
+    24: 0000000000004018     0 NOTYPE  GLOBAL DEFAULT   25 _edata
+    25: 00000000000013b0     0 FUNC    GLOBAL HIDDEN    17 _fini
+    26: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND __stack_chk_fail[...]
+    27: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND printf@GLIBC_2.2.5
+    28: 00000000000011c9    26 FUNC    GLOBAL DEFAULT   16 some_function
+    29: 0000000000004000     0 NOTYPE  GLOBAL DEFAULT   25 __data_start
+    30: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__
+    31: 0000000000004018     8 OBJECT  WEAK   DEFAULT   26 environ@GLIBC_2.2.5
+    32: 0000000000004008     0 OBJECT  GLOBAL HIDDEN    25 __dso_handle
+    33: 0000000000002000     4 OBJECT  GLOBAL DEFAULT   18 _IO_stdin_used
+    34: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND malloc@GLIBC_2.2.5
+    35: 0000000000004024     4 OBJECT  GLOBAL DEFAULT   26 global_uninitial[...]
+    36: 0000000000004028     0 NOTYPE  GLOBAL DEFAULT   26 _end
+    37: 00000000000010e0    38 FUNC    GLOBAL DEFAULT   16 _start
+    38: 0000000000004018     0 NOTYPE  GLOBAL DEFAULT   26 __bss_start
+    39: 00000000000011e3   458 FUNC    GLOBAL DEFAULT   16 main
+    40: 0000000000004010     4 OBJECT  GLOBAL DEFAULT   25 global_initializ[...]
+    41: 0000000000004018     8 OBJECT  GLOBAL DEFAULT   26 __environ@GLIBC_2.2.5
+    42: 0000000000004018     0 OBJECT  GLOBAL HIDDEN    25 __TMC_END__
+    43: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMC[...]
+    44: 0000000000000000     0 FUNC    WEAK   DEFAULT  UND __cxa_finalize@G[...]
+    45: 0000000000001000     0 FUNC    GLOBAL HIDDEN    12 _init
+```
+#### Disassembly
+```bash
+$ objdump -d --disassemble=some_function lab_4
+```
+```
+lab_4:     file format elf64-x86-64
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .plt.sec:
+
+Disassembly of section .text:
+
+00000000000011c9 <some_function>:
+    11c9:       f3 0f 1e fa             endbr64
+    11cd:       55                      push   %rbp
+    11ce:       48 89 e5                mov    %rsp,%rbp
+    11d1:       48 8d 05 30 0e 00 00    lea    0xe30(%rip),%rax        # 2008 <_IO_stdin_used+0x8>
+    11d8:       48 89 c7                mov    %rax,%rdi
+    11db:       e8 c0 fe ff ff          call   10a0 <puts@plt>
+    11e0:       90                      nop
+    11e1:       5d                      pop    %rbp
+    11e2:       c3                      ret
+
+Disassembly of section .fini:
+```
+comparing to our function:
+```c
+void some_function(void) { 
+    printf("Inside some_function\n");
+}
+```
+
+
+### Lab 6
+
+Compile a multi-argument C function to Assembly with gcc -S and annotate its stack frame: saved %rbp, return address, local variables, and any register-passed arguments 
