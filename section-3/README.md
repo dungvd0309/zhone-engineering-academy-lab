@@ -1057,8 +1057,49 @@ typedef struct {
 ---
 ## 14. Stack frame layout (System V AMD64 ABI): prologue/epilogue, %rbp/%rsp, register- vs. stack-passed arguments, the 128-byte red zone
 
-> The Stack frame layout (System V AMD64 ABI)—including prologue/epilogue, %rbp/%rsp register usage, argument passing (register vs. stack), and the 128-byte red zone—is not detailed in the provided book excerpt.  The text briefly introduces basic stack concept concepts on x86-32 architecture in Section 6.5: "The Stack and Stack Frames" (page 121), but it does not cover the System V AMD64 ABI details, register calling conventions, or the red zone
+## 14.1. Stack frame layout
 
+![func_stack](./img/func_stack.png)
+
+## 14.2. Prologue/Epilogue
+Prologue
+
+```asm
+push %rbp           ; save caller's base pointer
+mov  %rsp, %rbp     ; set up new base pointer = current top of stack
+sub  $32, %rsp      ; allocate space for local variables (if any)
+```
+
+Epilogue
+```asm
+mov  %rbp, %rsp     ; deallocate locals — rsp jumps back up to where rbp is
+pop  %rbp           ; restore caller's base pointer
+ret                 ; pop return address, jump back to caller
+```
+
+## 14.3. %rbp/%rsp
+
+`%rbp`:
+- The 64-bit base pointer
+- Tracks the start of a stack frame. When a function is called, `%rbp` is set at the very start of that function.
+
+`%rsp`:
+- The 64-bit stack pointer
+- Tracks the top of the stack (The lowest memory address boundary)
+
+## 14.4. register- vs. stack-passed arguments
+
+- In System V AMD64 ABI, there are 6 registers used to pass arguments: `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`.
+
+- In function calls with more 6 arguments needed, the extra arguments got passed into the stack instead.
+
+## 14.5. The 128-byte red zone
+
+The System V AMD64 ABI reserves a 128-byte region beyond the current value of the stack pointer (`%rsp - 1` down to `%rsp - 128`) designated as the red zone.
+
+Utilized for optimizing leaf functions - functions that does not call any other functions.
+
+---
 ## 15. Reading compiler-generated Assembly (gcc -S / objdump -d) to identify a function's own stack frame
 
 > The topic of inspecting compiler-generated Assembly (using gcc -S or objdump -d) to examine a function's stack frame is briefly mentioned in Section 6.8: "Performing a Nonlocal Goto: setjmp() and longjmp()" (specifically in the callout/note on page 136).  It appears under the section discussing how compiler optimizations affect local variables during a longjmp(), where the text notes:  "It is instructive to look at the assembler output produced when compiling the setjmp_vars.c program both with and without optimization. The cc -S command produces a file with the extension .s containing the generated assembler code for a program."  
