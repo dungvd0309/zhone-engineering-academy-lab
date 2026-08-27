@@ -10,6 +10,20 @@
 
 1. [Processes, Process Identifiers](#1-processes-process-identifiers)
 1. [Process creation (fork/vfork)](#2-process-creation-forkvfork)
+1. [Process Termination (_exit/exit)](#3-process-termination-_exitexit)
+1. [Monitoring Child Processes (wait/waitpid/waitid)](#4-monitoring-child-processes-waitwaitpidwaitid)
+1. [Program Execution (exec)](#5-program-execution-exec)
+1. [Race Conditions between fork/exec/wait](#6-race-conditions-between-forkexecwait)
+1. [system Function](#7-system-function)
+1. [Process Groups, Sessions, Controlling Terminal & Job Control](#8-process-groups-sessions-controlling-terminal-job-control)
+1. [Command-Line Arguments and Environment List](#9-command-line-arguments-and-environment-list)
+1. [Memory Layout of a C Program (text/data/bss/heap/stack)](#10-memory-layout-of-a-c-program-textdatabssheapstack)
+1. [Shared Libraries: static vs. dynamic linking](#11-shared-libraries-static-vs-dynamic-linking)
+1. [getrlimit and setrlimit Functions (resource limits)](#12-getrlimit-and-setrlimit-functions-resource-limits)
+1. [ELF format, symbol table, relocation - supplementary linking concepts](#13-elf-format-symbol-table-relocation---supplementary-linking-concepts)
+1. [Stack frame](#14-stack-frame)
+1. [Reading compiler-generated Assembly (gcc -S / objdump -d) to identify a function's own stack frame](#15-reading-compiler-generated-assembly-gcc--s--objdump--d-to-identify-a-functions-own-stack-frame)
+1. [Lab](#16-lab)
 
 ---
 ## 1. Processes, Process Identifiers
@@ -1055,7 +1069,7 @@ typedef struct {
 ```
 
 ---
-## 14. Stack frame layout (System V AMD64 ABI): prologue/epilogue, %rbp/%rsp, register- vs. stack-passed arguments, the 128-byte red zone
+## 14. Stack frame
 
 ## 14.1. Stack frame layout
 
