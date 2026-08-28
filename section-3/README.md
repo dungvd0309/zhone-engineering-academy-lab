@@ -1071,11 +1071,11 @@ typedef struct {
 ---
 ## 14. Stack frame
 
-## 14.1. Stack frame layout
+### 14.1. Stack frame layout
 
 ![func_stack](./img/func_stack.png)
 
-## 14.2. Prologue/Epilogue
+### 14.2. Prologue/Epilogue
 Prologue
 
 ```asm
@@ -1091,7 +1091,7 @@ pop  %rbp           ; restore caller's base pointer
 ret                 ; pop return address, jump back to caller
 ```
 
-## 14.3. %rbp/%rsp
+### 14.3. %rbp/%rsp
 
 `%rbp`:
 - The 64-bit base pointer
@@ -1101,13 +1101,13 @@ ret                 ; pop return address, jump back to caller
 - The 64-bit stack pointer
 - Tracks the top of the stack (The lowest memory address boundary)
 
-## 14.4. register- vs. stack-passed arguments
+### 14.4. register- vs. stack-passed arguments
 
 - In System V AMD64 ABI, there are 6 registers used to pass arguments: `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`.
 
 - In function calls with more 6 arguments needed, the extra arguments got passed into the stack instead.
 
-## 14.5. The 128-byte red zone
+### 14.5. The 128-byte red zone
 
 The System V AMD64 ABI reserves a 128-byte region beyond the current value of the stack pointer (`%rsp - 1` down to `%rsp - 128`) designated as the red zone.
 
