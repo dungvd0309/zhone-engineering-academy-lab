@@ -8,6 +8,9 @@
 ## Table of Contents
 
 1. [Thread](#1-thread)
+2. [Concurrency](#2-concurrency)
+3. [Real-world Case Study: the Mars Pathfinder priority-inversion bug](#3-real-world-case-study-the-mars-pathfinder-priority-inversion-bug)
+4. [Thread Synchronization](#4-thread-synchronization)
 
 ---
 ## 1. Thread 
@@ -27,8 +30,6 @@ A process can contain multiple threads.
 |**Context switch**| Slow (Full memory map/page table switch)| Fast (Only registers/stack pointer switch)
 |**Isolation**|A process crashing doesn't directly crash another|A thread crashing can crash the whole process|
 |**Information sharing**|Difficult (Use IPC)|Easy (Use shared variables - global or heap)|
-
-
 
 ### 1.2 Thread Identification
 
@@ -126,7 +127,7 @@ pthread_detach(pthread_self());
 ```
 
 ---
-## 2. Concurrency
+## 2. Concurrency and Mutual Exclusion
 
 Concurrency is the ability of a system to handle multiple tasks during **overlapping time periods** (NOT *at the same time*).
 
@@ -165,8 +166,12 @@ Concurrency is the ability of a system to handle multiple tasks during **overlap
 - Debugging concurrent programs is inherently more complex than debugging sequential programs.
 - Issues such as race conditions and deadlocks can be difficult to reproduce and diagnose.
 
+### 2.3. Mutual Exclusion
+
+Mechanisms that ensures that one thread/process is doing certain things at one time (others are excluded)
+
 ---
-## 3. Real-world case study: the Mars Pathfinder priority-inversion bug
+## 3. Real-world Case Study: the Mars Pathfinder priority-inversion bug
 
 **Priority Inversion**: A high priority task can become blocked by a lower priority task indefinitely, if lower priority task locks access to resources shared by both tasks.
 
@@ -185,11 +190,75 @@ Concurrency is the ability of a system to handle multiple tasks during **overlap
 ![mars_pathfinder_bug](./img/mars_pathfinder_bug.png)
 
 => The engineers fixed the issue using a mechanism called **priority inheritance**:
-- When a *low-priority* task holds a resource needed by a *high-priority* task, the system temporarily boosts the *low-priority* task’s priority
+- When a *low-priority* task holds a resource needed by a *high-priority* task, the system temporarily boosts the *low-priority* task’s priority.
 
 ---
 ## 4. Thread Synchronization
-    mutex locks and critical sections 
+
+### 4.1. Atomic & Non-atomic
+
+**Non-atomic operation**
+- Consists of multiple underlying steps. 
+- Can be interrupted midway at any assembly instruction.
+
+**Atomic operation**
+- An operation that executes as a single, indivisible unit
+- It either completes fully or doesn't start at all.
+- Can never be interrupted or observed in a partially complete state.
+
+### 4.2 Critical Section
+
+**Critical section**
+- A section of code that accesses a shared resource. 
+- Its execution should be atomic.
+
+An example about Critical section and Non-atomic operation in [Lab 1](#lab-1)
+
+### 4.3. Mutex locks
+
+#### Initializing Mutexes
+
+***Statically Allocating a Mutex***
+
+```c
+pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+```
+
+- Used for initializing a statically allocated mutex with default attributes
+
+***Dynamically Initializing a Mutex***
+
+```c
+#include <pthread.h>
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
+
+/* Returns 0 on success, or a positive error number on error */
+```
+
+- When a dynamically initialized mutex is no longer needed, it should be destroyed using 
+
+    ```c
+    #include <pthread.h>
+
+    int pthread_mutex_destroy(pthread_mutex_t *mutex);
+
+    /* Returns 0 on success, or a positive error number on error */
+    ```
+
+
+#### Locking and Unlocking a Mutex
+```c
+#include <pthread.h>
+
+int pthread_mutex_lock(pthread_mutex_t *mutex);
+int pthread_mutex_unlock(pthread_mutex_t *mutex);
+
+/* Both return 0 on success, or a positive error number on error */
+```
+
+
+---
 ## 5. Reader-writer locks 
 ## 6. Reentrancy and Thread-Specific Data 
 ## 7. Threads and Signals, Threads and fork, Threads and I/O 
@@ -250,17 +319,19 @@ Result: 1098357 (expected: 2000000)
 
 The expected result is 2000000. However, the actual result is lower than the expectation, and varies unpredictably between runs due to race condition. 
 
-The `++` operator is non-atomic, it actually consists of 3 CPU instructions:
+The `counter++` operation is non-atomic, it actually consists of 3 CPU instructions (Read-Modify-Write):
 
 ```asm
-movq    counter(%rip), %rax   ; 1. Load counter data from memory into rax register
-addq    $1, %rax            ; 2. Add 1 into rax
-movq    %rax, counter(%rip)   ; 3. Store rax data back to counter variable
+movq    counter(%rip), %rax ; 1. Read: Load counter data from memory into rax register
+addq    $1, %rax            ; 2. Modify: Add 1 into rax
+movq    %rax, counter(%rip) ; 3. Write: Store rax data back to counter variable
 ```
 
-When those two threads run concurrently, instructions of 2 `++` operators may collide. 
+And the fact that `counter` is a shared resource makes `counter++` a critical section.
 
-Example of 2 `++` instructions colliding:
+When those two threads run concurrently, instructions of 2 `++` operators can collide. 
+
+Example of 2 `counter++` instructions colliding:
 
 *Assuming that counter initially equals 5*
 
@@ -278,6 +349,52 @@ The counter result is 6 instead of 7.
 
 ## Lab 2
 Fix the race condition using a mutex lock; verify correctness under load
+
+We fixed the race condition by protecting the critical section (`counter++`) using a mutex lock
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+
+pthread_mutex_t mutex;
+long counter = 0; /* global variable */
+
+void* increment(void* arg) /* thread function */
+{
+    for (int i = 0; i < 1000000; i++) 
+    {
+        pthread_mutex_lock(&mutex);
+        counter++;   
+        pthread_mutex_unlock(&mutex);
+    }
+    return NULL;
+}
+
+int main() 
+{
+    pthread_mutex_init(&mutex, NULL);
+    pthread_t t1, t2;
+
+    /* Create two threads that do the incrementing */
+    pthread_create(&t1, NULL, increment, NULL);
+    pthread_create(&t2, NULL, increment, NULL);
+
+    /* Wait for both threads to complete */
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    printf("Result: %ld (expected: 2000000)\n", counter);
+
+    pthread_mutex_destroy(&mutex);
+    return 0;
+}
+```
+Output:
+```bash
+$ ./lab_2
+Result: 2000000 (expected: 2000000)
+```
+
 ## Lab 3
 Test the reentrancy (thread-safety) of a self-written function and fix it if it is not reentrant
 ## Lab 4
