@@ -260,10 +260,10 @@ Please backup this code: @�,��
 ```
 > Some weird characters appeared!
 
-Explanation the `return 0;` workflow:
+Explanation of the `return 0;` workflow:
 
 1. The `main()` function returns. The local variable `super_important_key` stored in `main()` stack frame disappears.
-1. `g_key_ptr` becomes a dangling pointer since it points to a freed address.
+1. `g_key_ptr` becomes a dangling pointer since it still points to the local variable `super_important_key` whose lifetime ends.
 1. `exit()` automatically occurs after `main()` returns.
 1. `exit()` called registerd exit handlers, which is `key_backup` in this case.
 1. The `key_backup` function performs a printf from `g_key_ptr`, resulting in undefined behaviors.
