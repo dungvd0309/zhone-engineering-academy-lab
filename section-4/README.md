@@ -246,7 +246,6 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
     /* Returns 0 on success, or a positive error number on error */
     ```
 
-
 #### Locking and Unlocking a Mutex
 ```c
 #include <pthread.h>
@@ -257,10 +256,19 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex);
 /* Both return 0 on success, or a positive error number on error */
 ```
 
-
 ---
 ## 5. Reader-writer locks 
-## 6. Reentrancy and Thread-Specific Data 
+## 6. Reentrancy and Thread-Specific Data
+## 6.1. Reentracy
+
+Reentracy is a property of a function which can be interrupted at any point during its execution and then safely called again ("re-entered") before its previous invocations complete execution.
+
+A reentracy function: 
+- Avoids the use of global and static variables
+- Does not use mutex locks
+- Any information that must be returned to the caller is stored in buffers allocated by the caller.
+
+---
 ## 7. Threads and Signals, Threads and fork, Threads and I/O 
 ## 8. Condition Variables and Barriers 
 ## 9. Semaphores, Mutexes
