@@ -135,7 +135,7 @@ Concurrency is the ability of a system to handle multiple tasks during **overlap
 
 ![concurrency_parallelism](./img/concurrency_parallelism.png)
 
-**Sequential**: Tasks run one at a time, in order.
+**Sequential**: Tasks run one at a time, in order.Threads & Synchronization
 
 **Concurrency**: Multiple tasks make progress during **overlapping time periods**.
 
@@ -216,9 +216,9 @@ An example about Critical section and Non-atomic operation in [Lab 1](#lab-1)
 
 ### 4.3. Mutex locks
 
-#### Initializing Mutexes
+A mutex locks ensures that only one thread at a time can hold the lock and execute the critical section protected by it. Any other thread trying to acquire the same mutex will block until the thread holding it releases it.
 
-***Statically Allocating a Mutex***
+***Statically Allocating a Mutex:***
 
 ```c
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -226,11 +226,9 @@ pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 
 - Used for initializing a statically allocated mutex with default attributes
 
-***Dynamically Initializing a Mutex***
+***Dynamically Initializing a Mutex:***
 
 ```c
-#include <pthread.h>
-
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
 
 /* Returns 0 on success, or a positive error number on error */
@@ -239,17 +237,13 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
 - When a dynamically initialized mutex is no longer needed, it should be destroyed using 
 
     ```c
-    #include <pthread.h>
-
     int pthread_mutex_destroy(pthread_mutex_t *mutex);
 
     /* Returns 0 on success, or a positive error number on error */
     ```
 
-#### Locking and Unlocking a Mutex
+***Locking and Unlocking a Mutex:***
 ```c
-#include <pthread.h>
-
 int pthread_mutex_lock(pthread_mutex_t *mutex);
 int pthread_mutex_unlock(pthread_mutex_t *mutex);
 
@@ -258,15 +252,185 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex);
 
 ---
 ## 5. Reader-writer locks 
+
+Reader-writer locks let multiple readers access shared data concurrently, but writers get exclusive access. Useful when reads vastly outnumber writes.
+
+Lock for reading:
+```c
+int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);
+```
+Lock for writing:
+```c
+int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock)
+```
+Release for both:
+```c
+int pthread_rwlock_unlock(pthread_rwlock_t *rwlock)
+```
+Non-blocking variants:
+```c
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock); 
+int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock); 
+```
+
+---
 ## 6. Reentrancy and Thread-Specific Data
-## 6.1. Reentracy
 
-Reentracy is a property of a function which can be interrupted at any point during its execution and then safely called again ("re-entered") before its previous invocations complete execution.
+## 6.1. Reentrancy
 
-A reentracy function: 
-- Avoids the use of global and static variables
-- Does not use mutex locks
+Reentrancy is a property of a function which can be interrupted at any point during its execution and then safely called again ("re-entered") before its previous invocations complete execution.
+
+A reentrant function achieves thread safety without the use of mutexes.
+
+A reentrant function: 
+- Avoids the use of global and static variables.
+- Does not use mutex locks.
 - Any information that must be returned to the caller is stored in buffers allocated by the caller.
+
+Example:
+```c
+/* A non-reentrant example */
+/* [The function depends on global variable i] */
+int i;
+
+/* Both fun1() and fun2() are not reentrant */
+
+/* fun1() is NOT reentrant because it uses global variable i */
+int fun1()
+{
+    return i * 5;
+}
+
+/* fun2() is NOT reentrant because it calls a non-reentrant function */
+int fun2()
+{
+   return fun1() * 5;
+}
+```
+```c
+/* Both fun1() and fun2() are reentrant */
+int fun1(int i)
+{
+    return i * 5;
+}
+
+int fun2(int i)
+{
+   return fun1(i) * 5;
+}
+```
+
+## 6.2. Thread-Specific Data
+
+Thread-specific data allows a function to maintain a separate copy of a variable for each thread that calls the function.
+
+Each thread’s variable continues to exist between the thread’s
+invocations of the function.
+
+Thread-specific data items are differentiated by **keys**
+
+```c
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
+
+/* Returns 0 on success, or a positive error number on error */
+```
+
+```c
+int pthread_setspecific(pthread_key_t key, const void *value);
+
+/* Returns 0 on success, or a positive error number on error */
+
+void *pthread_getspecific(pthread_key_t key);
+
+/* Returns pointer, or NULL if no thread-specific data is associated with key */
+```
+
+Example:
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <stdint.h>
+
+pthread_key_t counter_key;
+
+void print_counter()
+{
+    /* Retrieve the value from thread-local storage */
+    int counter = (int)(intptr_t)pthread_getspecific(counter_key);
+
+    printf("Thread %lu: counter = %d\n", 
+            pthread_self(), counter);
+}
+
+void add_counter(int add_value)
+{
+    /* Retrieve the value from thread-local storage */
+    int counter = (int)(intptr_t)pthread_getspecific(counter_key);
+
+    /* Update the counter */
+    counter += add_value;
+
+    /* Store the value in thread-local storage */
+    pthread_setspecific(counter_key, (void *)(intptr_t)counter);
+}
+
+void *thread_func(void *arg)
+{   
+    pthread_setspecific(counter_key, (void *)(intptr_t)0);
+
+    for(int i = 1; i <= 10; i++)
+    {
+        add_counter(1);
+        print_counter();
+    }
+    
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t t1, t2;
+
+    /* Create the thread-specific data key */
+    pthread_key_create(&counter_key, NULL);
+
+    /* Thread creations*/
+    pthread_create(&t1, NULL, thread_func, NULL);
+    pthread_create(&t2, NULL, thread_func, NULL);
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    /* Delete the key */ 
+    pthread_key_delete(counter_key);
+
+    return 0;
+}
+```
+Output:
+```
+Thread 127454999996096: counter = 1
+Thread 127454999996096: counter = 2
+Thread 127454999996096: counter = 3
+Thread 127454999996096: counter = 4
+Thread 127454999996096: counter = 5
+Thread 127454999996096: counter = 6
+Thread 127455008388800: counter = 1
+Thread 127455008388800: counter = 2
+Thread 127455008388800: counter = 3
+Thread 127455008388800: counter = 4
+Thread 127455008388800: counter = 5
+Thread 127455008388800: counter = 6
+Thread 127455008388800: counter = 7
+Thread 127455008388800: counter = 8
+Thread 127455008388800: counter = 9
+Thread 127455008388800: counter = 10
+Thread 127454999996096: counter = 7
+Thread 127454999996096: counter = 8
+Thread 127454999996096: counter = 9
+Thread 127454999996096: counter = 10
+```
+We can see that, although 2 seperate threads (TIDs `...96` and `...00`) using the same key, each thread maintains a completely independent counter value.
 
 ---
 ## 7. Threads and Signals, Threads and fork, Threads and I/O 
