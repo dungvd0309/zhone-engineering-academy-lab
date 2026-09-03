@@ -103,7 +103,7 @@ int main(void)
     if (pid < 0) 
     {
         perror("fork failed");
-        return 1;
+        return -1;
     } 
     else if (pid == 0) 
     {
