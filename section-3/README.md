@@ -923,11 +923,32 @@ int main(int argc, char *argv[]) /* Allocated in frame for main() */
 ---
 ## 11. Shared Libraries: static vs. dynamic linking
 
-> **section 41**
+### 11.1. Static linking
 
-Shared libraries are a technique for placing library functions into a single unit that can be shared by multiple processes at run time.
+Static linking copies the library code directly into your executable at compile time
 
-This technique can save both disk space and RAM.
+Pros:
+- Single self-contained binary - no dependency
+
+Cons:
+- Large binary size
+- Wastes memory if multiple processes use the same lib
+
+### 11.2. Dynamic linking & Shared Libraries
+
+Dynamic linking keeps the library separate and loads/links it at runtime.
+
+Shared libraries are a technique for placing library functions into a single unit that can be shared by multiple processes at runtime.
+
+The linker does not copy the library's object modules into the executable. Instead, it records a dependency reference to the shared library (named with a `.so `extension). When the program starts, a helper program called the dynamic linker finds, loads, and links the shared library into the process's memory
+
+Pros:
+- Saves space - Only a single copy of the shared library code resides in physical memory.
+- Easy upgrades - Modifying or upgrading a shared library automatically updates all dependent programs
+
+Cons:
+- The dynamic linker has to locate the library and resolve symbol relocations at startup -> slower startup
+- Dependency resolution happens at runtime instead of compile time -> harder to debug
 
 ---
 ## 12. getrlimit and setrlimit Functions (resource limits)
