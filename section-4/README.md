@@ -11,6 +11,14 @@
 2. [Concurrency](#2-concurrency)
 3. [Real-world Case Study: the Mars Pathfinder priority-inversion bug](#3-real-world-case-study-the-mars-pathfinder-priority-inversion-bug)
 4. [Thread Synchronization](#4-thread-synchronization)
+5. [Reader-writer locks](#5-reader-writer-locks)
+6. [Reentrancy and Thread-Specific Data](#6-reentrancy-and-thread-specific-data)
+7. [Threads and Signals, Threads and fork, Threads and I/O ](#7-threads-and-signals-threads-and-fork-threads-and-io)
+8. [Condition Variables and Barriers](#8-condition-variables-and-barriers)
+9. [Semaphores, Mutexes](#9-semaphores-mutexes)
+10. [Lock implementation](#10-lock-implementation)
+11. [Deadlock](#11-deadlock)
+12. [Lab](#12-lab)
 
 ---
 ## 1. Thread 
