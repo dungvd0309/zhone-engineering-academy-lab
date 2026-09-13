@@ -135,7 +135,7 @@ pthread_detach(pthread_self());
 ```
 
 ---
-## 2. Concurrency and Mutual Exclusion
+## 2. Concurrency
 
 Concurrency is the ability of a system to handle multiple tasks during **overlapping time periods** (NOT *at the same time*).
 
@@ -173,10 +173,6 @@ Concurrency is the ability of a system to handle multiple tasks during **overlap
 **Complexity of Debugging**
 - Debugging concurrent programs is inherently more complex than debugging sequential programs.
 - Issues such as race conditions and deadlocks can be difficult to reproduce and diagnose.
-
-### 2.3. Mutual Exclusion
-
-Mechanisms that ensures that one thread/process is doing certain things at one time (others are excluded)
 
 ---
 ## 3. Real-world Case Study: the Mars Pathfinder priority-inversion bug
@@ -238,24 +234,14 @@ pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 
 ```c
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
-
-/* Returns 0 on success, or a positive error number on error */
+int pthread_mutex_destroy(pthread_mutex_t *mutex);
 ```
 
-- When a dynamically initialized mutex is no longer needed, it should be destroyed using 
-
-    ```c
-    int pthread_mutex_destroy(pthread_mutex_t *mutex);
-
-    /* Returns 0 on success, or a positive error number on error */
-    ```
 
 ***Locking and Unlocking a Mutex:***
 ```c
 int pthread_mutex_lock(pthread_mutex_t *mutex);
 int pthread_mutex_unlock(pthread_mutex_t *mutex);
-
-/* Both return 0 on success, or a positive error number on error */
 ```
 
 ---
@@ -263,19 +249,19 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex);
 
 Reader-writer locks let multiple readers access shared data concurrently, but writers get exclusive access. Useful when reads vastly outnumber writes.
 
-Lock for reading:
+***Lock for reading***:
 ```c
 int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);
 ```
-Lock for writing:
+***Lock for writing***:
 ```c
 int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock)
 ```
-Release for both:
+***Release for both***:
 ```c
 int pthread_rwlock_unlock(pthread_rwlock_t *rwlock)
 ```
-Non-blocking variants:
+***Non-blocking variants***:
 ```c
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock); 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock); 
@@ -442,10 +428,323 @@ We can see that, although 2 seperate threads (TIDs `...96` and `...00`) using th
 
 ---
 ## 7. Threads and Signals, Threads and fork, Threads and I/O 
+
+### 7.1. Threads and Signals
+
+Signals action and dispositions are process-wide.
+
+If any stop or terminate signal is delivered to any thread in the process, all of the threads in the process are ***stopped*** or ***terminated***. All threads in a process share the same disposition for each signal.
+
+### 7.2. Threads and fork
+
+When a multithreaded process calls `fork()`:
+- Only the calling thread is replicated in the child process.
+- All of the other threads vanish in the child, without executing thread-specific data destructors or cleanup handlers.
+- Lead to various problems:
+    - Locked mutexes cause deadlock: 
+        
+        Mutexes held by other threads during `fork()` remain locked in the child process. Since their owners don't exist in the child, acquiring them causes a permanent deadlock.
+
+    - Data inconsistency: 
+    
+        Global data structures can be corrupted if a thread was interrupted mid-update.
+
+    - Memory leaks: 
+    
+        Uncleaned resources left behind by vanished threads.
+
+**Example**: Recreation of deadlock in child process
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+pthread_mutex_t mutex;
+
+void *thread1(void* arg) /* thread 1 */
+{
+    char thread_name[] = "Thread 1";
+
+    pthread_mutex_lock(&mutex);
+    printf("[%s] LOCKED MUTEX.\n", thread_name);
+
+    sleep(2); /* Simulate some work */
+
+    pthread_mutex_unlock(&mutex);
+    printf("[%s] UNLOCKED MUTEX.\n", thread_name);
+
+    return NULL;
+}
+
+void *thread2(void* arg) /* thread 2 */
+{
+    char thread_name[] = "Thread 2";
+    char process_name[20];
+
+    sleep(1); /* Wait for thread 1 to acquire the mutex */
+    int pid = fork();
+
+    if (pid == 0) /* Child process */
+        snprintf(process_name, sizeof(process_name), "Child Process");
+    else if (pid > 0) /* Parent process */
+        snprintf(process_name, sizeof(process_name), "Parent Process");
+    
+    /* Attempt to lock the mutex */
+    while(pthread_mutex_trylock(&mutex) != 0) 
+    {
+        printf("[%s][%s] Failed to lock mutex.\n", thread_name, process_name);
+        sleep(1);
+    }
+    printf("[%s][%s] Locked mutex.\n", thread_name, process_name);
+
+    pthread_mutex_unlock(&mutex);
+    printf("[%s][%s] Unlocked mutex.\n", thread_name, process_name);
+
+    if (pid == 0) /* Child process */
+        exit(0);
+    else if (pid > 0) /* Parent process */
+        wait(NULL); 
+
+    return NULL;
+}
+
+int main() 
+{
+    pthread_mutex_init(&mutex,NULL);
+
+    pthread_t t1, t2;
+
+    pthread_create(&t1, NULL, thread1, NULL);
+    pthread_create(&t2, NULL, thread2, NULL);
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    return 0;
+}
+```
+Output:
+```
+[Thread 1] LOCKED MUTEX.
+[Thread 2][Parent Process] Failed to lock mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+[Thread 1] UNLOCKED MUTEX.
+[Thread 2][Parent Process] Locked mutex.
+[Thread 2][Parent Process] Unlocked mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+[Thread 2][Child Process] Failed to lock mutex.
+...
+``` 
+> Child process: mutex remains locked after `fork()`
+
+- Parent process: 
+    - `thread1` locks the mutex first.
+    - 1 sec later, `thread2` calls `fork()`.
+    - 2 sec later, `thread1` releases the mutex.
+    - `thread2` (parent) locks and unlocks the mutex normally
+- Child process:
+    - The child is created when the mutex is LOCKED. 
+    - `fork()` only copies the calling thread. `thread1` is not created in the child process.
+    - Therefore, no thread in the child can release the mutex.
+
+    => The mutex in the child remains locked indefinitely
+
+    => PERMANENT BLOCKING
+
+---
 ## 8. Condition Variables and Barriers 
-## 9. Semaphores, Mutexes
+
+### 8.1. Condition Variables
+
+A condition variable allows one thread to inform other threads about changes in the state of a shared variable nd allows theother threads to wait (block) for such notification.
+
+A condition variable is always used in conjunction with a mutex.
+
+The mutex provides mutual exclusion for accessing the shared variable, while the condition variable is used to signal changes in the variable’s state.
+
+***Statically Allocated Condition Variables***:
+```c
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+```
+***Dynamically Allocated Condition Variables***:
+```c
+int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr);
+int pthread_cond_destroy(pthread_cond_t *cond);
+```
+
+***Signaling and Waiting on Condition Variables***:
+
+Signaling:
+```c
+int pthread_cond_signal(pthread_cond_t *cond);
+```
+- at least one of the blocked threads is woken up
+```c
+int pthread_cond_broadcast(pthread_cond_t *cond);
+```
+- all blocked threads are woken up
+
+Waiting:
+```c
+int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
+```
+- performs the following steps:
+
+    1. Unlock the currently held mutex
+    1. Block the calling thread until the condition variable is signaled
+    1. Relock the mutex
+
+- blocks a thread until the condition variable `cond` is signaled
+- must be governed by a `while` loop rather than an `if`, because *other threads may be woken up first* and *spurious wake-ups can occur*
+
+```c
+int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
+                            const struct timespec *abstime);
+```
+- is the same as `pthread_cond_wait()`, except that the `abstime` argument specifies an upper limit on the time that the thread will sleep while waiting for the condition variable to be signaled.
+
+---
+## 9. Semaphores
+
+### 9.1. Concepts
+
+A semaphore is a non-negative integer variable that is shared between various threads. 
+
+Semaphore works upon signaling mechanism, in this a thread can be signaled by another thread. 
+
+Two types:
+- Binary semaphore: 0 or 1, used for signaling
+- Counting semaphore: tracks N available instances of a resource
+
+Semaphore has no priority inheritance.
+
+### 9.2. Semaphores vs. Mutexes
+
+||Mutex|Semaphore|
+|-|-|-|
+|**Concept**|Locking mechanism|Signaling mechanism|
+|**Ownership**|Same thread locks/unlocks|Any thread can give/take|
+|**Purpose**|Protecting a shared resource|Task synchronization / event notification / counting resources|
+|**Priority inheritance**|Usually yes|No|
+
+### 9.3. POSIX Semaphores
+
+There are 2 types of POSIX Semaphores:
+- Named semaphore: 
+    - Has a name
+    - Calling `sem_open()` with the same name, unrelated processes can access the same semaphore.
+- Unnamed semaphore:
+    - Doesn't have a name
+    - Can be shared between processes or between a group of threads
+    - When shared between processes, must reside in a region of shared memory (System V, POSIX, mmap())
+    - When shared between threads, reside in an area of memory shared by the threads (heap/global variable)
+
+#### Named Semaphore
+
+Opening a Named Semaphore: creates and opens a new named semaphore or opens an existing semaphore
+```c
+#include <fcntl.h> /* Defines O_* constants */
+#include <sys/stat.h> /* Defines mode constants */
+#include <semaphore.h>
+
+sem_t *sem_open(const char *name, int oflag, ...
+/* mode_t mode, unsigned int value */ );
+
+/* Returns pointer to semaphore on success, or SEM_FAILED on error */
+```
+
+Closing a Semaphore: terminates the association of the semaphore
+- Releases any resources of the semaphore for this process  
+- Decreases the count of processes referencing the semaphore
+- Closing a semaphore does not delete it
+```c
+int sem_close(sem_t *sem);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+Removing a Named Semaphore: removes the semaphore identified by `name` and marks the semaphore to be destroyed once all processes cease using it
+```c
+int sem_unlink(const char *name);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+#### Unnamed Semaphore
+
+Initializing an Unnamed Semaphore:
+```c
+int sem_init(sem_t *sem, int pshared, unsigned int value);
+
+/* Returns 0 on success, or –1 on error */
+```
+- `pshared`:
+    - 0: shared between threads of the calling process
+    - nonzero: shared between processes 
+- `value`: initial value of the semaphore
+
+Destroying an Unnamed Semaphore:
+```c
+int sem_destroy(sem_t *sem);
+
+/* Returns 0 on success, or –1 on error */
+```
+- It is safe to destroy a sema-
+phore only if no processes or threads are waiting on it.
+
+#### Semaphore Operations
+
+Waiting on a Semaphore: Decreases the value of the semaphore `sem` by 1
+```c
+int sem_wait(sem_t *sem);
+int sem_trywait(sem_t *sem);
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+Posting a Semaphore: Increases the value of the semaphore `sem` by 1
+```c
+int sem_post(sem_t *sem);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+Retrieving the Current Value of a Semaphore: returns the current value of the semaphore `sem` in the `int` pointed to by `sval`.
+```c
+int sem_getvalue(sem_t *sem, int *sval);
+
+/* Returns 0 on success, or –1 on error */
+```
+---
 ## 10. Lock implementation
+spinlocks vs. blocking locks (conceptual link to futex)  
+
+### 10.1. Spinlock
+A spinlock is a low-level synchronization mechanism that protects a critical section by “spinning” in a tight loop until the lock becomes available
+
+### 10.2. Blocking Locks
+A blocking lock is a synchronization mechanism where a thread that fails to acquire the lock is put to sleep (removed from the CPU run queue) instead of busy-waiting.
+
+Including:
+- Mutex
+- Semaphore
+- File lock
+- Condition variable
+
+### 10.3. Futex
+
+A futex (fast userspace mutex) 
+
+---
 ## 11. Deadlock
+the four necessary conditions, prevention and avoidance strategies (e.g. lock ordering), detecting and breaking a deadlock
 
 ---
 ## 12. Lab
