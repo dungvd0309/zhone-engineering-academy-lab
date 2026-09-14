@@ -17,8 +17,6 @@ UNIX IPC facilities are divided into thread broad functional categories:
 
 ![ipc.png](./img/ipc.png)
 
-### 1.1. Communication Facilities
-
 ## 2. Pipes
 
 ### 2.1. Overview
@@ -116,7 +114,7 @@ The `popen()` function:
 
 `popen()` creates a pipe + child process so it must be closed with `pclose()`.
 
-Example:
+**Example**:
 ```c
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,6 +176,124 @@ int mkfifo(const char *pathname, mode_t mode);
 
     ![file_perm.png](./img/file_perm.png)
 
+**Example**:
+```c
+/* server.h */
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h> 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <signal.h>
+
+void cleanup_fifo(int sig) 
+{
+    unlink("./my_fifo");
+    exit(0);
+}
+
+int main()
+{
+    char buffer[254];
+
+    /* Create a FIFO */
+    mkfifo("./my_fifo", S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    /* Clean up the FIFO on SIGINT */
+    signal(SIGINT, cleanup_fifo);
+
+    while (1)
+    {
+        /* Open the FIFO for reading */
+        int fd = open("./my_fifo", O_RDONLY);
+        if (fd == -1) 
+        {
+            perror("open");
+            return -1;
+        }
+
+        /* Read data from the FIFO */
+        int bytes_read;
+        while((bytes_read = read(fd, buffer, sizeof(buffer) - 1)) > 0)
+        {
+            buffer[bytes_read] = '\0';   // null-terminate the string
+            printf("Received: %s\n", buffer);
+        }
+
+        /* Close the FIFO after sender is done */
+        close(fd);
+    }
+     
+    exit(0);
+}
+```
+```c
+/* client.h */
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h> 
+#include <fcntl.h>
+#include <sys/stat.h>
+
+const char *FIFO_NAME = "./my_fifo";
+const int NUMBER_OF_MESSAGES = 5;
+
+int main()
+{
+    /* Open the FIFO for writing */
+    int fd = open(FIFO_NAME, O_WRONLY);
+    if (fd == -1) 
+    {
+        perror("open");
+        exit(-1);
+    }
+
+    /* Write messages to the FIFO */
+    for(int i = 0; i < NUMBER_OF_MESSAGES; i++)
+    {
+        char message[50];
+        snprintf(message, sizeof(message), "Message %d", i + 1);
+        write(fd, message, sizeof(message));
+        printf("Sent: %s\n", message);
+        sleep(1); 
+    }
+
+    close(fd);
+    exit(0);
+}
+```
+
+The server is responsible for creating the FIFO for communication. Therefore, we start the server first:
+```bash
+$ ./server
+Server is up. Waiting for messages...
+
+```
+
+A FIFO appears in the file directory:
+```bash
+$ ls
+client  client.c  my_fifo  server  server.c
+```
+
+Let's run the client, then the server can receive it through `my_fifo`:
+```bash
+./client
+Sent: Message 1
+Sent: Message 2
+Sent: Message 3
+Sent: Message 4
+Sent: Message 5
+```
+Server:
+```
+Server is up. Waiting for messages...
+Received: Message 1
+Received: Message 2
+Received: Message 3
+Received: Message 4
+Received: Message 5
+```
 
 ## Lab
 
