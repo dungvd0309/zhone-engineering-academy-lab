@@ -244,6 +244,11 @@ int pthread_mutex_lock(pthread_mutex_t *mutex);
 int pthread_mutex_unlock(pthread_mutex_t *mutex);
 ```
 
+```c
+int pthread_mutex_trylock(pthread_mutex_t *mutex);
+/* Attempt to lock a mutex instead of blocking */
+```
+
 ---
 ## 5. Reader-writer locks 
 
@@ -562,7 +567,7 @@ Output:
 
 ### 8.1. Condition Variables
 
-A condition variable allows one thread to inform other threads about changes in the state of a shared variable nd allows theother threads to wait (block) for such notification.
+A condition variable allows one thread to inform other threads about changes in the state of a shared variable and allows the other threads to wait (block) for such notification.
 
 A condition variable is always used in conjunction with a mutex.
 
@@ -723,11 +728,24 @@ int sem_getvalue(sem_t *sem, int *sval);
 /* Returns 0 on success, or –1 on error */
 ```
 ---
-## 10. Lock implementation
-spinlocks vs. blocking locks (conceptual link to futex)  
+## 10. Lock implementation 
 
 ### 10.1. Spinlock
-A spinlock is a low-level synchronization mechanism that protects a critical section by “spinning” in a tight loop until the lock becomes available
+A spinlock is a low-level synchronization mechanism that protects a critical section by “spinning” in a tight loop until the lock becomes available.
+
+The spin loop is built on an atomic CAS (compare and swap) instruction:
+
+```c
+while (!compare_and_swap(&lock, 0, 1)) {
+    // failed, lock still held — try again
+}
+```
+`compare_and_swap(address, expected, new)` atomically:
+
+1. Reads the value at `address`
+1. Compares it to `expected`
+1. If they match → writes `new`, returns success
+1. If not → leaves it unchanged, returns failure
 
 ### 10.2. Blocking Locks
 A blocking lock is a synchronization mechanism where a thread that fails to acquire the lock is put to sleep (removed from the CPU run queue) instead of busy-waiting.
@@ -738,13 +756,76 @@ Including:
 - File lock
 - Condition variable
 
+||Spinlock|Blocking lock|
+|-|-|-|
+|*Behavior*|Repeatedly checking the lock|Putting thread to sleep|
+|*Space*|User space|Kernel space|
+|*Pros*|Fast lock acquire/release|Consumes no CPU while sleeping|
+|*Cons*|Wastes CPU cycles|More expensive context switch|
+|*Usages*|Very short critical sections|Longer critical sections, uncertain/long wait times|
+
 ### 10.3. Futex
 
-A futex (fast userspace mutex) 
+A futex (fast userspace mutex) is a Linux mechanism that combines the two approaches above (Spinlock + Blocking locks) 
+
+The futex is a 32-bit `int` in user space.
+
+**Lock flow**:
+
+- Thread attempts atomic CAS in user space.
+    - Success -> enters critical section, no syscall.
+    - Failure -> calls `futex(FUTEX_WAIT, ...)`
+
+**Unlock flow**
+
+- Thread clears the lock value in user space.
+- Checks a waiter flag tracked in the lock
+    - No waiters → done, no syscall
+    - Waiters present → `calls futex(FUTEX_WAKE, ...)`, kernel wakes one thread off the wait queue.
 
 ---
 ## 11. Deadlock
-the four necessary conditions, prevention and avoidance strategies (e.g. lock ordering), detecting and breaking a deadlock
+
+When more than one threads is locking the same set of mutexes, deadlock situations can arise.
+
+```
+Thread A
+1. pthread_mutex_lock(mutex1);
+2. pthread_mutex_lock(mutex2);
+blocks
+
+Thread B
+1. pthread_mutex_lock(mutex2);
+2. pthread_mutex_lock(mutex1);
+blocks
+```
+
+> These 2 threads wait for each other to release the lock.
+
+Ways to avoid deadlock:
+
+- Define a mutex hierarchy: When using a the same set of mutexes, threads should always lock them in the same order:
+    ```
+    Thread A
+    1. pthread_mutex_lock(mutex1);
+    2. pthread_mutex_lock(mutex2);
+
+    Thread B
+    1. pthread_mutex_lock(mutex1);
+    2. pthread_mutex_lock(mutex2);
+
+    Lock mutex1 then mutex2
+    ```
+- Use `pthread_mutex_trylock()` to avoid blocking:
+    ```
+    Thread A
+    1. pthread_mutex_lock(mutex1);
+    2. pthread_mutex_lock(mutex2);
+
+    Thread B
+    1. pthread_mutex_trylock(mutex2);
+    2. pthread_mutex_trylock(mutex1);
+    ```
 
 ---
 ## 12. Lab
