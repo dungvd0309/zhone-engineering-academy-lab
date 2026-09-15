@@ -1043,7 +1043,169 @@ $ ./lab_4
 [Consumer] consumed 4, counter = 0
 ```
 
-Producer and consumer's critical section are protected by a mutex. Consumer, which consuming 4 items, uses a conditional variable in order to wait for the producer creating >= 4 items 
+Producer and consumer's critical section are protected by a mutex. Consumer, which consuming 4 items, uses a conditional variable in order to wait for the producer creating >= 4 items.
 
 ## Lab 5
 Reproduce a deadlock between two threads acquiring two locks in opposite order, then fix it via consistent lock ordering
+
+In this lab, we got:
+- 2 mutex: `mutex1` and `mutex2`
+- `thread_a` lock order: lock `mutex2` then `mutex1`
+- `thread_b` lock order: lock `mutex1` then `mutex2`
+- Both `thread_a` and `thread_b` change increase `counter` by 1.
+- `thread_c`: track changes of `counter`, exit if `counter` hasn't be changed after 1 second.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
+
+pthread_mutex_t mutex1;
+pthread_mutex_t mutex2;
+long counter = 0; /* global variable */
+
+void* thread_a(void* arg) 
+{
+    while (1)
+    {
+        pthread_mutex_lock(&mutex2);
+        pthread_mutex_lock(&mutex1);
+        counter++;
+        printf("[Thread A] counter = %ld\n", counter);
+        pthread_mutex_unlock(&mutex2);
+        pthread_mutex_unlock(&mutex1);
+        usleep(100000); 
+    }
+    return NULL;
+}
+
+void* thread_b(void* arg) 
+{
+    while (1)
+    {
+        pthread_mutex_lock(&mutex1);
+        pthread_mutex_lock(&mutex2);
+        counter++;
+        printf("[Thread B] counter = %ld\n", counter);
+        pthread_mutex_unlock(&mutex1);
+        pthread_mutex_unlock(&mutex2);
+        usleep(100000); 
+    }
+    return NULL;
+}
+
+void* thread_c(void* arg) /* deadlock timeout check */
+{
+    while (1)
+    {
+        long old_counter = counter;
+        sleep(1);
+        if (old_counter == counter)
+        {
+            printf("[Thread C] Deadlock detected!\n");
+            exit(-1);
+        }
+    }
+    return NULL;
+}
+
+int main() 
+{
+    pthread_mutex_init(&mutex1, NULL);
+    pthread_mutex_init(&mutex2, NULL);
+
+    pthread_t t1, t2, t3;
+
+    pthread_create(&t1, NULL, thread_a, NULL);
+    pthread_create(&t2, NULL, thread_b, NULL);
+    pthread_create(&t3, NULL, thread_c, NULL);
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    pthread_mutex_destroy(&mutex1);
+    pthread_mutex_destroy(&mutex2);
+    return 0;
+}
+```
+
+Output of sevaral tries:
+
+```bash
+[Thread A] counter = 1
+[Thread B] counter = 2
+[Thread C] Deadlock detected!
+```
+
+```bash
+[Thread A] counter = 1
+[Thread B] counter = 2
+[Thread A] counter = 3
+[Thread B] counter = 4
+[Thread C] Deadlock detected!
+```
+
+```bash
+...
+[Thread B] counter = 6
+[Thread A] counter = 7
+[Thread B] counter = 8
+[Thread C] Deadlock detected!
+```
+
+Fix:
+
+2 threads follow the same lock order: lock `mutex1` then `mutex2`
+
+```c
+void* thread_a(void* arg) 
+{
+    while (1)
+    {
+        pthread_mutex_lock(&mutex1);
+        pthread_mutex_lock(&mutex2);
+        counter++;
+        printf("[Thread A] counter = %ld\n", counter);
+        pthread_mutex_unlock(&mutex2);
+        pthread_mutex_unlock(&mutex1);
+        usleep(100000); 
+    }
+    return NULL;
+}
+
+void* thread_b(void* arg) 
+{
+    while (1)
+    {
+        pthread_mutex_lock(&mutex1);
+        pthread_mutex_lock(&mutex2);
+        counter++;
+        printf("[Thread B] counter = %ld\n", counter);
+        pthread_mutex_unlock(&mutex2);
+        pthread_mutex_unlock(&mutex1);
+        usleep(100000); 
+    }
+    return NULL;
+}
+```
+
+Output:
+```
+...
+[Thread B] counter = 1009
+[Thread A] counter = 1010
+[Thread B] counter = 1011
+[Thread A] counter = 1012
+[Thread A] counter = 1013
+[Thread B] counter = 1014
+[Thread A] counter = 1015
+[Thread B] counter = 1016
+[Thread A] counter = 1017
+[Thread B] counter = 1018
+[Thread A] counter = 1019
+[Thread B] counter = 1020
+...
+```
+
+> No longer getting a deadlock!
