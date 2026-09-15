@@ -957,7 +957,93 @@ Result: 2000000 (expected: 2000000)
 
 ## Lab 3
 Test the reentrancy (thread-safety) of a self-written function and fix it if it is not reentrant
+
 ## Lab 4
 Implement a producer-consumer program using a mutex and a condition variable
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+
+pthread_mutex_t mutex;
+pthread_cond_t cond;
+long counter = 0;
+
+void* producer(void* arg) 
+{
+    while (1)
+    {
+        pthread_mutex_lock(&mutex);
+        counter += 1;   
+        printf("[Producer] produced 1, counter = %ld\n", counter);
+        pthread_cond_signal(&cond); 
+        pthread_mutex_unlock(&mutex);
+        sleep(1);
+    }
+    return NULL;
+}
+
+void* consumer(void* arg)
+{
+    while (1)
+    {
+        pthread_mutex_lock(&mutex);
+        while (counter < 4) /* wait for the producer to produce */
+            pthread_cond_wait(&cond, &mutex);
+        
+        counter -= 4; /* consume items */
+        printf("[Consumer] consumed 4, counter = %ld\n", counter);
+        pthread_mutex_unlock(&mutex);
+        sleep(1);
+    }
+    return NULL;
+}
+
+int main() 
+{
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
+
+    pthread_t t1, t2;
+
+    pthread_create(&t1, NULL, producer, NULL);
+    pthread_create(&t2, NULL, consumer, NULL);
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond);
+    return 0;
+}
+```
+Output:
+```bash
+$ ./lab_4
+[Producer] produced 1, counter = 1
+[Producer] produced 1, counter = 2
+[Producer] produced 1, counter = 3
+[Producer] produced 1, counter = 4
+[Consumer] consumed 4, counter = 0
+[Producer] produced 1, counter = 1
+[Producer] produced 1, counter = 2
+[Producer] produced 1, counter = 3
+[Producer] produced 1, counter = 4
+[Consumer] consumed 4, counter = 0
+[Producer] produced 1, counter = 1
+[Producer] produced 1, counter = 2
+[Producer] produced 1, counter = 3
+[Producer] produced 1, counter = 4
+[Consumer] consumed 4, counter = 0
+[Producer] produced 1, counter = 1
+[Producer] produced 1, counter = 2
+[Producer] produced 1, counter = 3
+[Producer] produced 1, counter = 4
+[Consumer] consumed 4, counter = 0
+```
+
+Producer and consumer's critical section are protected by a mutex. Consumer, which consuming 4 items, uses a conditional variable in order to wait for the producer creating >= 4 items 
+
 ## Lab 5
 Reproduce a deadlock between two threads acquiring two locks in opposite order, then fix it via consistent lock ordering
