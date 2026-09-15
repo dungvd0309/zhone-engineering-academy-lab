@@ -17,6 +17,8 @@ UNIX IPC facilities are divided into thread broad functional categories:
 
 ![ipc.png](./img/ipc.png)
 
+---
+
 ## 2. Pipes
 
 ### 2.1. Overview
@@ -38,21 +40,27 @@ A pipe is an unidirectional data channel.
 ### 2.2. Creating and Using Pipes
 
 ```c
+#include <unistd.h>
+
 int pipe(int filedes[2]);
 /* Returns 0 on success, or –1 on error */
 ```
 The situation after a pipe has been created by `pipe()`:
+
 ![pipe.png](./img/pipe.png)
 
 During a `fork()`, the child process inherits copies of its parent’s file descriptors. 
 
 ![pipe2.png](./img/pipe2.png)
 
-After that, the sender process should closes its descriptor for the read end of the pipe, and the receiver should closes its descriptor for the write end.
+After that:
+- The sender should closes the read end of the pipe.
+- The receiver should closes the write end of the pipe.
 
-Example:
+**Example 1**: Normal tranfer through pipe
 ```c
 #include <stdio.h>
+#include <unistd.h>
 
 int main() 
 {
@@ -75,10 +83,12 @@ int main()
 
             /* Child now reads from pipe */
             char buffer[100];
-            read(filedes[0], buffer, sizeof(buffer));
-            printf("Received from parent: %s\n", buffer);
+            while(read(filedes[0], buffer, sizeof(buffer)) > 0)
+            {
+                printf("Received from parent: %s\n", buffer);
+            }
 
-            close(filedes[0]); /* Close read end */
+            close(filedes[0]); /* Close read end after writing */
             break;
 
         default: /* Parent process */
@@ -87,15 +97,47 @@ int main()
             /* Parent now writes to pipe */
             write(filedes[1], "Hello, child!", 14);
 
-            close(filedes[1]); /* Close write end */
+            close(filedes[1]); /* Close write end after reading */
             break;
     }
+
     return 0;
 }
 ```
-Output
+Output:
 ```
 Received from parent: Hello, child!
+```
+
+**Example 2**: Self-deadlock since a process doesn't closing one end.
+
+Same code on the example above, but we doesn't close the write end in the child process.
+
+```c
+case 0: /* Child process */
+    /* close(filedes[1]); */ /* Write end now isn't closed*/
+
+    /* Child now reads from pipe */
+    char buffer[100];
+    while(read(filedes[0], buffer, sizeof(buffer)) > 0)
+    {
+        printf("Received from parent: %s\n", buffer);
+    }
+
+    close(filedes[0]); /* Close read end after writing */
+    break;
+```
+Output:
+```
+Received from parent: Hello, child!
+```
+We get the same output, main process ends successfully.
+
+However, the child process is still running since it gets a self-deadlock. The pipe still has the write end in the child process, and `read()` blocks it from runnning.
+
+```bash
+$ ps aux | grep pipe_2
+dungvd     44574  0.0  0.0   2772  1008 pts/2    S    04:01   0:00 ./pipe_2
 ```
 
 ### 2.3. popen()/pclose()
@@ -294,6 +336,40 @@ Received: Message 3
 Received: Message 4
 Received: Message 5
 ```
+
+---
+
+## 3. Introduction to System V IPC
+
+### 3.1. IPC Identifiers and Keys
+
+**IPC Identifier**: An **internal integer name** assigned by the kernel to reference an active IPC object. It is a property of the object itself and is visible system-wide.
+
+**IPC Key**: An **external naming scheme** of data type `key_t` used by cooperating processes to locate and agree on the same IPC object. 
+
+The **kernel** maintains data structures **mapping keys to identifiers** for each IPC mechanism
+
+### 3.2. Permission Structure
+
+### 3.3. Configuration Limits
+
+### 3.4. Advantages/Disadvantages
+
+---
+
+## 4. System V Message Queues
+
+---
+
+## 5. System V and POSIX Semaphores
+
+---
+
+## 6. System V Shared Memory
+
+---
+
+## 7. Signals
 
 ## Lab
 

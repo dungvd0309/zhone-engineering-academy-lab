@@ -18,7 +18,7 @@ int main()
             return -1;
 
         case 0: /* Child process */
-            close(filedes[1]); /* Close unused write end */
+            // close(filedes[1]); /* Close unused write end */
 
             /* Child now reads from pipe */
             char buffer[100];
