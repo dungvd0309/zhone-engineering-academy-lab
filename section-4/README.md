@@ -15,7 +15,7 @@
 6. [Reentrancy and Thread-Specific Data](#6-reentrancy-and-thread-specific-data)
 7. [Threads and Signals, Threads and fork, Threads and I/O ](#7-threads-and-signals-threads-and-fork-threads-and-io)
 8. [Condition Variables and Barriers](#8-condition-variables-and-barriers)
-9. [Semaphores, Mutexes](#9-semaphores-mutexes)
+9. [Semaphores](#9-semaphores)
 10. [Lock implementation](#10-lock-implementation)
 11. [Deadlock](#11-deadlock)
 12. [Lab](#12-lab)
