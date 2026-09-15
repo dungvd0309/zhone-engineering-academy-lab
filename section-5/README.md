@@ -347,25 +347,195 @@ Received: Message 5
 
 **IPC Key**: An **external naming scheme** of data type `key_t` used by cooperating processes to locate and agree on the same IPC object. 
 
-The **kernel** maintains data structures **mapping keys to identifiers** for each IPC mechanism
+The **kernel** maintains data structures **mapping keys to identifiers** for each IPC mechanism.
+
+**Inspecting IPC objects**:
+```bash
+$ ipcs        # list all IPC objects 
+$ ipcs -q     # message queues only
+$ ipcs -s     # semaphores only
+$ ipcs -m     # shared memory only
+$ ipcrm       # remove an IPC object by id
+```
+
+**Methods for generating IPC keys**:
+
+1. Randomly choose some integer key value, placed in a header
+file included by all programs using the IPC object (may accidentally choose a value used by another application)
+1. Specifying `IPC_PRIVATE` guarantees that the kernel creates a new, unique IPC structure. 
+    ```c
+    /* create a message queue*/
+    id = msgget(IPC_PRIVATE, S_IRUSR | S_IWUSR);
+    ```
+1. Generating Keys with `ftok()` (file to key):
+    ```c
+    #include <sys/ipc.h>
+    key_t ftok(char *pathname, int proj);
+    /* Returns integer key on success, or –1 on error */
+    ```
 
 ### 3.2. Permission Structure
 
+The associated data structure for an IPC object is initialized when the object is created via the appropriate `get` system call:
+
+```c
+struct ipc_perm {
+    key_t           __key;  /* Key, as supplied to 'get' call */
+    uid_t           uid;    /* Owner's user ID */
+    gid_t           gid;    /* Owner's group ID */
+    uid_t           cuid;   /* Creator's user ID */
+    gid_t           cgid;   /* Creator's group ID */
+    unsigned short  mode;   /* Permissions */
+    unsigned short  __seq;  /* Sequence number */
+};
+```
+
 ### 3.3. Configuration Limits
 
-### 3.4. Advantages/Disadvantages
+**Message Queues**
+- **MSGMAX** (`/proc/sys/kernel/msgmax`): The maximum allowable size of a single message (in bytes)
+- **MSGMNB** (`/proc/sys/kernel/msgmnb`): The default maximum capacity for a single message queue (in bytes)
+- **MSGMNI** (`/proc/sys/kernel/msgmni`): The limit on the total number of message queues
+
+**Semaphores**  (`/proc/sys/kernel/sem`)
+- **SEMMSL**: The maximum number of primitive semaphores per semaphore set.
+- **SEMMNS**: The system-wide maximum number of semaphores across all sets.
+- **SEMOPM**: The maximum number of operations permitted per `semop()` system call.
+- **SEMMNI**: The system-wide maximum number of semaphore sets.
+
+**Shared Memory**:
+- **SHMMAX** (`/proc/sys/kernel/shmmax`): The maximum size of a single shared memory segment (in bytes)
+- **SHMMNI** (`/proc/sys/kernel/shmmni`): The system-wide maximum number of shared memory segments
+- **SHMALL** (`/proc/sys/kernel/shmall`): The total amount of shared memory, measured in pages, allocated system-wide.
+
+**Pipes & FIFOs:**
+- **PIPE_BUF**: The maximum number of bytes that can be written atomically to a pipe or FIFO without interleaving.
+- **Pipe Capacity**: The maximum buffer capacity of a pipe (65,536 bytes since Linux 2.6.11), bounded per user by `/proc/sys/fs/pipe-max-size`
 
 ---
 
-## 4. System V Message Queues
+## 4. Message Queues
+
+Message queues allow processes to exchange data in the form of messages.
+
+Communication via message queues is message-oriented => the reader receives whole messages written by the writer.
+
+It is **NOT possible** to:
+- Read part of a message
+- Leaving remainder in the queue
+- Read multiple messages at a time
+
+### 4.1. System V Message Queues
+
+|Interface|Message queues|
+|-|-|
+|Header file|`<sys/msg.h>`|
+|Associated data structure|`msqid_ds`|
+|Create/open object|`msgget()`|
+|Close object|(none)|
+|Control operations|`msgctl()`|
+|Performing IPC|`msgsnd()`-write message<br>`msgrcv()`-read message|
+
+#### 4.1.1. Creating or Opening a Message Queue
+```c
+int msgget(key_t key, int msgflg);
+/* Returns message queue identifier on success, or –1 on error */
+```
+
+- `msgflg`:
+    - File permission bits.
+    - `IPC_CREAT`: If no message queue with the specified key exists, create a new queue.
+    - `IPC_EXCL`: If IPC_CREAT was also specified, and a queue already exists, fail with the error `EEXIST`
+
+#### 4.1.2. Sending Messages
+```c
+int msgsnd(int msqid, const void *msgp, size_t msgsz, int msgflg);
+/* Returns 0 on success, or –1 on error */
+```
+- `msgp`: Pointer to a programmer-defined structure:
+    ```c
+    struct mymsg {
+        long mtype;     /* Message type */
+        char mtext[];   /* Message body */
+    }
+    ```
+- `msgsz`: Size of `mtext` in bytes.
+- `msgflg`:
+    - `IPC_NOWAIT`: Perform a nonblocking send, and return `EAGAIN` when the queue is full.
+
+A `msgsnd()` call that is blocked by a full queue may be interrupted by a signal handler. In this case, it fails with the error `EINTR`.
+
+#### 4.1.3. Receiving Messages
+
+```c
+ssize_t msgrcv(int msqid, void *msgp, size_t maxmsgsz, long msgtyp, int msgflg);
+/* Returns number of bytes copied into mtext field, or –1 on error */
+```
+
+`msgrcv()`: reads and removes a message from a message queue, and copies its contents into the buffer pointed to by msgp
+
+- `maxmsgsz`: Maximum space of the buffer <br> If `mtext` size > `maxmsgsz`, no message is removed and fails with the error `E2BIG`.
+- `msgtyp`:
+    - `== 0`: Take the first msg from the queue.
+    - `> 0`: Take the first msg whose `mtype == msgtyp`.
+    - `< 0`: Take the first msg with the smallest `mtype`
+    such that `mtype <= abs(msgtyp)`.
+- `msgflg`:
+    - `IPC_NOWAIT`: Perform a nonblocking receive, and return `ENOMSG` when the queue is empty.
+    - `MSG_EXCEPT`: If `msgtyp > 0`, Take the first msg whose `mtype != msgtyp`
+    - `MSG_NOERROR`: If `mtext` size > `maxmsgsz`, take the msg by truncating the msg.
+
+#### 4.1.4. Message Queue Control Operations
+```c
+int msgctl(int msqid, int cmd, struct msqid_ds *buf);
+/* Returns 0 on success, or –1 on error */
+```
+- `IPC_RMID`: Immediately remove the message queue object, ignore the third argument.
+- `IPC_STAT`: Get a copy of `msqid_ds` associated with this msg queue.
+- `IPC_SET`: Update selected fields of `msqid_ds` associated with this msg queue.
+
+```c
+struct msqid_ds {
+    struct ipc_perm msg_perm; /* Ownership and permissions */
+    time_t msg_stime; /* Time of last msgsnd() */
+    time_t msg_rtime; /* Time of last msgrcv() */
+    time_t msg_ctime; /* Time of last change */
+    unsigned long __msg_cbytes; /* Number of bytes in queue */
+    msgqnum_t msg_qnum; /* Number of messages in queue */
+    msglen_t msg_qbytes; /* Maximum bytes in queue */
+    pid_t msg_lspid; /* PID of last msgsnd() */
+    pid_t msg_lrpid; /* PID of last msgrcv() */
+};
+```
+---
+
+## 5. Semaphores
+
+### 5.1. System V Semaphores
+
+|Interface|Semaphores|
+|-|-|
+|Header file|`<sys/sem.h>`|
+|Associated data structure|`semid_ds`|
+|Create/open object|`semget()`|
+|Close object|(none)|
+|Control operations|`semctl()`|
+|Performing IPC|`semop()`—test/adjust semaphore|
 
 ---
 
-## 5. System V and POSIX Semaphores
+## 6. Shared Memory
 
----
+### 6.1. System V Shared Memory
 
-## 6. System V Shared Memory
+|Interface|Message queues|
+|-|-|
+|Header file|`<sys/shm.h>`|
+|Associated data structure|`msqid_ds`|
+|Create/open object|`shmget()` + `shmat()`|
+|Close object|`shmdt()`|
+|Control operations|`shmctl()`|
+|Performing IPC|access memory in shared region|
 
 ---
 
