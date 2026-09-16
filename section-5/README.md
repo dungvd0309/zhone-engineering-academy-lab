@@ -57,7 +57,7 @@ After that:
 - The sender should closes the read end of the pipe.
 - The receiver should closes the write end of the pipe.
 
-**Example 1**: Normal tranfer through pipe
+#### **Example 1**: Normal tranfer through pipe
 ```c
 #include <stdio.h>
 #include <unistd.h>
@@ -109,7 +109,7 @@ Output:
 Received from parent: Hello, child!
 ```
 
-**Example 2**: Self-deadlock since a process doesn't closing one end.
+#### **Example 2**: Self-deadlock since a process doesn't closing one end.
 
 Same code on the example above, but we doesn't close the write end in the child process.
 
@@ -156,7 +156,7 @@ The `popen()` function:
 
 `popen()` creates a pipe + child process so it must be closed with `pclose()`.
 
-**Example**:
+#### **Example**: `popen()` a `ls` command
 ```c
 #include <stdio.h>
 #include <stdlib.h>
@@ -218,7 +218,7 @@ int mkfifo(const char *pathname, mode_t mode);
 
     ![file_perm.png](./img/file_perm.png)
 
-**Example**:
+#### **Example**: FIFO tranfer between a server and a client
 ```c
 /* server.h */
 #include <stdio.h>
@@ -510,7 +510,7 @@ struct msqid_ds {
 };
 ```
 
-**Example**: Sending a long value through a message queue
+#### **Example**: Sending a `long` value through a message queue
 ```c
 #include <stdio.h>
 #include <stdlib.h>
@@ -592,11 +592,33 @@ Received msg: 1234567890123456789
 |Create/open object|`semget()`|
 |Close object|(none)|
 |Control operations|`semctl()`|
-|Performing IPC|`semop()`—test/adjust semaphore|
+|Performing IPC|`semop()`-test/adjust semaphore|
+
+#### 5.1.1. Creating or Opening a Semaphore Set
+```c
+int semget(key_t key, int nsems, int semflg);
+/* Returns semaphore set identifier on success, or –1 on error */
+```
+
+#### 5.1.2. Semaphore Control Operations
+
+### 5.2. POSIX Semaphores
+
+Mentioned in [section 4](../section-4/)
 
 ---
 
 ## 6. Shared Memory
+
+Shared memory allows ≥ 2 processes to share the same region of physical memory.
+
+This is the fastest form of IPC, because the data doesn't need to be copied between processes.
+
+A shared memory segment is mapped to be part of a process's user-space memory, no kernel intervention is required for IPC.
+
+![shared_mem.png](./img/shared_mem.png)
+
+Processes should implement a **synchronization technique** to access a shared memory.
 
 ### 6.1. System V Shared Memory
 
@@ -608,6 +630,286 @@ Received msg: 1234567890123456789
 |Close object|`shmdt()`|
 |Control operations|`shmctl()`|
 |Performing IPC|access memory in shared region|
+
+#### 6.1.1. Creating, Opening a Shared Memory Segment
+
+`shmget()` creates a new shared memory segment or opening an existing segment
+```c
+int shmget(key_t key, size_t size, int shmflg);
+/* Returns shared memory segment identifier on success, or –1 on error */
+```
+- `size`: the desired size of the segment, in bytes (positive int)<br>The kernel allocates shared memory in **multiples of the system page size**.
+- `shmflg`: 
+    - permission bits
+    - `IPC_CREAT`, `IPC_EXCL`
+    - `SHM_HUGETLB` (since Linux 2.6): create a shared memory that uses *huge pages*.
+    - `SHM_NORESERVE` (since Linux 2.6.15)
+
+#### 6.1.2. Attaching, Detaching a Shared Memory Segment
+
+`shmat()` attaches the shared memory segment to the calling's virtual address space.
+```c
+void *shmat(int shmid, const void *shmaddr, int shmflg);
+/* Returns address at which shared memory is attached on success, or (void *) –1 on error */
+```
+- `shmaddr`: 
+    - `NULL`: Attach segment at a suitable address selected by the kernel (preferred method).
+    - not `NULL`: Attach segment at the address specified by `shmaddr`, which must be a multiple of the system page size (or the error `EINVAL` results).
+    - not `NULL`, `SHM_RND` is set: Attach segment at the address specified by `shmaddr`, round `shmaddr` down to multiple of `SHMLBA`.
+
+- `shmflg`:
+    - `0`: Default
+    - `SHM_RDONLY`: Attach segment read-only
+    - `SHM_REMAP`: Replace any existing mapping at `shmaddr`
+    - `SHM_RND`: Round `shmaddr` down to multiple of `SHMLBA` (use with `shmaddr != NULL`)
+
+`shmdt()`: detact the segment from its virtual address space. NOT deleting the shared memory.
+
+```c
+int shmdt(const void *shmaddr);
+/* Returns 0 on success, or –1 on error */
+```
+
+- `shmaddr`: the address returned by `shmat()`
+
+#### 6.1.3. Shared Memory Control Operations
+
+```c
+int shmctl(int shmid, int cmd, struct shmid_ds *buf);
+/* Returns 0 on success, or –1 on error */
+```
+
+Generic operations:
+- `IPC_RMID`: Marks the segment for deletion.
+    - If no process has the segment attached, immediately remove; otherwise removal happens once after all processes have detached from it.
+- `IPC_STAT`: Copies the segment's `shmid_ds` structure into `buf`.
+- `IPC_SET`: Updates selected fields of the segment's `shmid_ds` structure from `buf`.
+
+Locking operations:
+- `SHM_LOCK`: Locks the segment into RAM so it can't be swapped out, avoiding page-fault delays once pages are resident.
+- `SHM_UNLOCK`: Unlocks it, allowing swapping again.
+
+```c
+struct shmid_ds {
+    struct ipc_perm shm_perm; /* Ownership and permissions */
+    size_t shm_segsz; /* Size of segment in bytes */
+    time_t shm_atime; /* Time of last shmat() */
+    time_t shm_dtime; /* Time of last shmdt() */
+    time_t shm_ctime; /* Time of last change */
+    pid_t shm_cpid; /* PID of creator */
+    pid_t shm_lpid; /* PID of last shmat() / shmdt() */
+    shmatt_t shm_nattch; /* Number of currently attached processes */
+};
+```
+
+#### **Example 1**: Shared memory is allocated in multiples of the system page size
+
+Let's try creating a shared memory with only 10 bytes
+```c
+#include <stdio.h>
+#include <sys/shm.h>
+#include <unistd.h>
+
+int main()
+{
+    int shm_size = 10;
+
+    /* Create a new shared memory segment */
+    int shmid = shmget(IPC_PRIVATE, shm_size, IPC_CREAT | 0666);
+    if (shmid == -1) 
+    {
+        perror("shmget");
+        return -1;
+    }
+
+    /* Attach the segment to virtual memory */
+    void *baseaddr = shmat(shmid, NULL, 0);
+    if (baseaddr == (void *)-1) 
+    {
+        perror("shmat");
+        return -1;
+    }
+    
+    /* Mark for removal when no processes attached */
+    shmctl(shmid, IPC_RMID, NULL); 
+
+    printf("Shared memory attached at: %p\n", baseaddr);
+    printf("Process ID: %d\n", getpid());
+
+    getchar(); 
+    shmdt(baseaddr); /* Detach the segment */
+    return 0;
+}
+```
+
+Output:
+```
+Shared memory attached at: 0x706c1ed53000
+Process ID: 41006
+```
+
+Inspection:
+```bash
+$ ipcs -m
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status
+0x00000000 14         dungvd     666        10         1
+```
+`ipcs` shows that we have a 10-byte shared memory
+
+```bash
+$ pmap -x 41006
+Address           Kbytes     RSS   Dirty Mode  Mapping
+...
+0000706c1ed53000       4       0       0 rw-s-   [ shmid=0xe ]
+...
+```
+But when we use `pmap` to inspect the memory map, the shared memory is 4kB = 4096 bytes large, which is a multiple of system page size:
+```bash
+$ getconf PAGESIZE
+4096
+```
+
+### 6.2. POSIX Shared Memory
+
+### 6.3. Storing Pointers in Shared Memory
+
+Each process may employ different shared libraries and memory mappings, and may attach different sets of shared memory segments.
+
+It is unsafe to storing absolute pointers inside shared memory segments. 
+
+![shm_ptr.png](./img/shm_ptr.png)
+
+Pointer offsets to base address return from `shmat()` should be used instead.
+
+#### **Example**: Reproduce an error due to using storing an absolute pointer in a shared memory
+```c
+/* writer */
+#include <stdio.h>
+#include <sys/shm.h>
+
+int main()
+{
+    /* Create a new shared memory segment */
+    int shmid = shmget(123, 4096, IPC_CREAT | 0666);
+    if (shmid == -1) 
+    {
+        perror("shmget");
+        return -1;
+    }
+
+    /* Attach the segment to virtual memory */
+    long *baseaddr = shmat(shmid, NULL, 0);
+    if (baseaddr == (void *)-1) 
+    {
+        perror("shmat");
+        return -1;
+    }
+    
+    /* Pointers for referencing the shared memory */
+    long *p = &baseaddr[1]; 
+    long *target = &baseaddr[50];
+    
+    /* Store a value in the shared memory */
+    *target = 123456789;
+
+    /* Store a pointer to target in the shared memory */
+    *p = (long)target; /* Convert address to long*/
+
+    /* Access the shared memory */
+    printf("Memory addresses:\n");
+    printf("- baseaddr of shared memory: %p\n", baseaddr);
+    printf("- p in shared memory: %p\n", p);
+    printf("- target in shared memory: %p\n", target);
+
+    printf("Values:\n");
+    printf("- target value: %ld\n", *target);
+    printf("- p value: %p\n", (long *)*p);
+    printf("- p dereferenced value: %ld\n", *(long *)(*p));
+    
+    /* Detach the segment */
+    shmdt(baseaddr); 
+    return 0;
+}
+```
+
+```c
+/* reader */
+#include <stdio.h>
+#include <sys/shm.h>
+
+int main()
+{
+    /* Open an existed shared memory segment */
+    int shmid = shmget(123, 4096, 0666);
+    if (shmid == -1) 
+    {
+        perror("shmget");
+        return -1;
+    }
+
+    /* Attach the segment to virtual memory */
+    long *baseaddr = shmat(shmid, NULL, 0);
+    if (baseaddr == (void *)-1) 
+    {
+        perror("shmat");
+        return -1;
+    }
+
+    /* Mark for removal */
+    shmctl(shmid, IPC_RMID, NULL); 
+    
+    /* Pointers for referencing the shared memory */
+    long *p = &baseaddr[1]; 
+    long *target = &baseaddr[50];
+    
+    // *target = 123456789;
+    // *p = (long)target; 
+
+    /* Access the shared memory */
+    printf("Memory addresses:\n");
+    printf("- baseaddr of shared memory: %p\n", baseaddr);
+    printf("- p in shared memory: %p\n", p);
+    printf("- target in shared memory: %p\n", target);
+
+    printf("Values:\n");
+    printf("- target value: %ld\n", *target);
+    printf("- p value: %p\n", (long *)*p);
+    printf("- p dereferenced value: %ld\n", *(long *)(*p));
+    
+    /* Detach the segment */
+    shmdt(baseaddr); 
+    return 0;
+}
+```
+Output:
+```bash
+$ ./writer 
+Memory addresses:
+- baseaddr of shared memory: 0x7e74316fd000
+- p in shared memory: 0x7e74316fd008
+- target in shared memory: 0x7e74316fd190
+Values:
+- target value: 123456789
+- p value: 0x7e74316fd190
+- p dereferenced value: 123456789
+```
+```bash
+$ ./reader
+Memory addresses:
+- baseaddr of shared memory: 0x7db4b7e11000
+- p in shared memory: 0x7db4b7e11008
+- target in shared memory: 0x7db4b7e11190
+Values:
+- target value: 123456789
+- p value: 0x7e74316fd190
+Segmentation fault         [ -x /usr/lib/command-not-found ]
+```
+
+As we can see that, the base addresses of the attached shared memory in these 2 processes' virtual memories are different, causing:
+- `target` (stored in `baseaddr + 50`) is mapped to different addresses in 2 processes (`0x7e74316fd190` vs `0x7db4b7e11190`).
+- the absolute pointer `p` (stored in `baseaddr + 1`, value `0x7e74316fd190`) is unable to work properly in the reader process, it points to an unallocated address. => Causing Segmentation fault 
 
 ---
 
