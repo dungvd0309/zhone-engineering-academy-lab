@@ -1002,25 +1002,28 @@ As we can see that, the base addresses of the attached shared memory in these 2 
 
 ## 7. Signals Concept
 
+### 7.1. What are signals?
 Signals are software interrupts.
 
 A signal is a notification to a process that an event has occurred.
+
+Signal sources:
+- The kernel
+- Another process
+- The process itself
 
 Each signal is defined in `<signal.h>`:
 - has a unique integer, starting from 1.
 - has a name starting with `SIGxxxx`.
 
-A signal is *generated* by some event, later then is *delivered* to a process
+A signal is *generated* by some event, later then is *delivered* to a process.
 
-**Signal sources**:
+### 7.2. Signals Dispositions
 
-- The kernel
-- Another process
-- The process itself
-
-**Signal default dispositions**:
+**Signal default dispositions**: 
 
 Each signal has a current disposition
+
 - Term: terminate process
 - Ign: ignore signal
 - Core: terminate + dump core
@@ -1033,32 +1036,35 @@ Each signal has a current disposition
 - Ignore it
 - Run a signal handler
 
-**Two types of signal**:
+### 7.3. Two types of signal
 
-- Traditional/Standard signals: 
-    - Numbered 1 to 31.
-    - Each has a fixed, predefined meaning.
-    - Not queued: 
+**Traditional/Standard signals**: 
+- Numbered 1 to 31.
+- Each has a fixed, predefined meaning.
+- Not queued: 
 
-        If multiple instances of a standard signal are generated while that signal is blocked, only one is marked is pending.
+    If multiple instances of a standard signal are generated while that signal is blocked, only one is marked is pending.
 
-    - No guaranteed delivery order
+- No guaranteed delivery order.
 
-- Real-time signals:
-    - Numbered `SIGRTMIN` to `SIGRTMAX` (32-64 on Linux)
+**Real-time signals**:
 
-        `pthreads` lib uses 2-3 first real-time signals, therefore adjusts `SIGRTMIN` suitably to 34 or 35.
-    - Users define the meaning.
-    - Queued:
+- Numbered `SIGRTMIN` to `SIGRTMAX` (32-64 on Linux)
 
-        If multiple instances of a real-time signal are generated while that signal is blocked, they are all queued as pending. (limited by `RLIMIT_SIGPENDING`)
+    `pthreads` lib uses 2-3 first real-time signals, therefore adjusts `SIGRTMIN` suitably to 34 or 35.
+- Users define the meaning.
+- Queued:
 
-    - Delivered in a guaranteed order (First In First Out).
-    - Can carry a small data payload (int or pointer) via `sigqueue()`.
+    If multiple instances of a real-time signal are generated while that signal is blocked, they are all queued as pending (limited by `RLIMIT_SIGPENDING`).
 
-## 8. Signal Functions
+- Delivered in a guaranteed order (First In First Out).
+- Can carry a small data payload (int or pointer) via `sigqueue()`.
+
+## 8. Signal-related Functions
 
 ### 8.1. Changing Signal Dispositions: signal(), sigaction()
+
+`SIGKILL` and `SIGSTOP` can't be dispositioned
 
 #### 8.1.1. signal()
 ```c
@@ -1096,13 +1102,12 @@ struct sigaction {
 - `handler`: a handler function (or `SIG_IGN` to ignore, `SIG_DFL` to reset to default)
 - `sa_mask`: signals to auto-block only during handler execution (avoids getting interrupted mid-handler).
 - `sa_flags`:
-    - `SA_NOCLDSTOP`
-    - `SA_NOCLDWAIT`
-    - `SA_NODEFER`
-    - `SA_ONSTACK`
-    - `SA_RESETHAND`
-    - `SA_RESTART`
-    - `SA_SIGINFO`
+    - `SA_RESTART`: auto-restart a system call that got interrupted by this handler
+    - `SA_NODEFER`: don't auto-block this signal during its own handler (rare, riskier)
+    - `SA_RESETHAND`: reset disposition back to default after one delivery (one-shot handler)
+    - `SA_SIGINFO`:	pass extra info (`siginfo_t`) to the handler
+    - `SA_ONSTACK`:	run handler on an alternate stack (sigaltstack())
+    - `SA_NOCLDSTOP` / `SA_NOCLDWAIT`: tweak `SIGCHLD` behavior for stopped/dead children
 
 ### 8.2. Sending Signals: kill(), raise(), killpg()
 
@@ -1177,7 +1182,7 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 - `oldset`:
     - for saving the mask before changing
 
-### 8.5. Pending Signals
+### 8.5. Pending Signals: sigpending()
 
 If a process receives a signal that it is currently blocking, that signal is added to the process’s set of pending signals
 
@@ -1188,13 +1193,63 @@ int sigpending(sigset_t *set);
 /* Returns 0 on success, or –1 on error */
 ```
 
-### 8.6. Waiting for a Signal: pause()
+### 8.6. Waiting for a Signal: pause()/sigsuspend()
+
+#### 8.6.1. pause()
 
 `pause()` suspends the calling process until a signal handler interrupts
 
 ```c
 int pause(void);
 /* Always returns –1 with errno set to EINTR */
+```
+
+**Problem**: Incorrectly unblocking and waiting for a signal
+```c
+sigset_t intMask;
+sigset_t emptyMask;
+
+struct sigaction sa;
+
+/* Initialize masks */
+sigemptyset(&emptyMask);
+sigemptyset(&intMask);
+sigaddset(&intMask, SIGINT);
+
+/* SIGINT disposition */
+sigemptyset(&sa.sa_mask);
+sa.sa_flags = 0;
+sa.sa_handler = handler;
+sigaction(SIGINT, &sa, NULL);
+
+/* Block SIGINT */
+sigprocmask(SIG_BLOCK, &intMask, NULL);
+
+/* Critical section: Do some work here */
+
+/* Unblock SIGINT */
+sigprocmask(SIG_SETMASK, &emptyMask, NULL);
+
+/* <-- BUG: what if SIGINT arrives here... */
+
+pause();  /* Wait for SIGINT */
+```
+
+To avoid this problem, we require a means of atomically unblocking a signal and suspending the process. That is the purpose of the `sigsuspend()` system call.
+
+#### 8.6.2 sigsuspend()
+
+```c
+int sigsuspend(const sigset_t *mask);
+/* (Normally) returns –1 with errno set to EINTR */
+```
+
+`sigsuspend()` is equivalent to **atomically** performing these operations:
+
+```c
+sigprocmask(SIG_SETMASK, &mask, &prevMask); /* Assign new mask */
+pause();
+sigprocmask(SIG_SETMASK, &prevMask, NULL); /* Restore old mask */
 ```
 
 ---
