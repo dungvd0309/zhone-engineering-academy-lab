@@ -599,8 +599,93 @@ Received msg: 1234567890123456789
 int semget(key_t key, int nsems, int semflg);
 /* Returns semaphore set identifier on success, or –1 on error */
 ```
+- `nsems`: number of semaphores in that set, must be > 0
+    - For an existing set, `nsems` ≤ size of the existing set
+- `semflg`: 
+     - Permission bits
+     - `IPC_CREAT`, `IPC_EXCL`
+
+The semaphores within a set are numbered starting at 0.
 
 #### 5.1.2. Semaphore Control Operations
+```c
+int semctl(int semid, int semnum, int cmd, ... /* union semun arg */);
+/* Returns nonnegative integer on success (see text); returns –1 on error */
+```
+- `semnum`: identifies a particular semaphore within the set.
+
+- `arg`: a `semun` union
+    ```c
+    /* Definition of the semun union */
+
+    #ifndef SEMUN_H
+    #define SEMUN_H         /* Prevent accidental double inclusion */
+
+    #include <sys/types.h>  /* For portability */
+    #include <sys/sem.h>
+
+    union semun {           /* Used in calls to semctl() */
+        int val;
+        struct semid_ds * buf;
+        unsigned short * array;
+    #if defined(__linux__)
+        struct seminfo * __buf;
+    #endif
+    };
+
+    #endif
+    ```
+
+- `cmd`: the operation to be performed
+
+    ***Generic control operations***:
+
+    - `IPC_RMID`: Immediately remove the semaphore set an `semid_ds` data structure. Any processes blocked are immediately awakened, with `semop()` reporting the error `EIDRM`.
+
+    - `IPC_STAT`: Get a copy of the `semid_ds` to `arg.buf`.
+
+    - `IPC_SET`: Update selected fields of the `semid_ds` in `arg.buf`.
+
+    ***Retrieving and initializing semaphore values***:
+
+    - `GETVAL`: 
+    
+        Returns the value of the `semnum`-th semaphore in the `semid` set.
+
+    - `SETVAL`: 
+    
+        The value of the `semnum`-th semaphore in the `semid` set is initialized to the value specified in `arg.val`.
+
+    - `GETALL`: 
+        
+        Retrieve the values of all of the semaphores in the `semid` set, placing them in the array pointed to by `arg.array`.
+
+    - `SETALL`: 
+    
+        Initialize all semaphores in the `semid` set, using the values supplied in the array pointed to by `arg.array`.
+
+    ***Retrieving per-semaphore information***:
+
+    - `GETPID`: 
+
+        Return the PID of the last process to perform a `semop()` on this semaphore. If no process has yet performed a `semop()` on this semaphore, 0 is returned.
+
+    - `GETNCNT`:
+
+        Return the number of processes currently waiting for the value of this semaphore to increase.
+
+    - `GETZCNT`:
+
+        Return the number of processes currently waiting for the value of this semaphore to become 0.
+
+```c
+struct semid_ds {
+    struct ipc_perm sem_perm;   /* Ownership and permissions */
+    time_t sem_otime;           /* Time of last semop() */
+    time_t sem_ctime;           /* Time of last change */
+    unsigned long sem_nsems;    /* Number of semaphores in set */
+};
+```
 
 ### 5.2. POSIX Semaphores
 
@@ -773,6 +858,8 @@ $ getconf PAGESIZE
 
 ### 6.2. POSIX Shared Memory
 
+To be continued...
+
 ### 6.3. Storing Pointers in Shared Memory
 
 Each process may employ different shared libraries and memory mappings, and may attach different sets of shared memory segments.
@@ -913,9 +1000,205 @@ As we can see that, the base addresses of the attached shared memory in these 2 
 
 ---
 
-## 7. Signals
+## 7. Signals Concept
 
-## Lab
+Signals are software interrupts.
+
+A signal is a notification to a process that an event has occurred.
+
+Each signal is defined in `<signal.h>`:
+- has a unique integer, starting from 1.
+- has a name starting with `SIGxxxx`.
+
+A signal is *generated* by some event, later then is *delivered* to a process
+
+**Signal sources**:
+
+- The kernel
+- Another process
+- The process itself
+
+**Signal default dispositions**:
+
+Each signal has a current disposition
+- Term: terminate process
+- Ign: ignore signal
+- Core: terminate + dump core
+- Stop: stop process
+- Cont: resume a stopped process
+
+**Program disposition for a signal**:
+
+- Default action
+- Ignore it
+- Run a signal handler
+
+**Two types of signal**:
+
+- Traditional/Standard signals: 
+    - Numbered 1 to 31.
+    - Each has a fixed, predefined meaning.
+    - Not queued: 
+
+        If multiple instances of a standard signal are generated while that signal is blocked, only one is marked is pending.
+
+    - No guaranteed delivery order
+
+- Real-time signals:
+    - Numbered `SIGRTMIN` to `SIGRTMAX` (32-64 on Linux)
+
+        `pthreads` lib uses 2-3 first real-time signals, therefore adjusts `SIGRTMIN` suitably to 34 or 35.
+    - Users define the meaning.
+    - Queued:
+
+        If multiple instances of a real-time signal are generated while that signal is blocked, they are all queued as pending. (limited by `RLIMIT_SIGPENDING`)
+
+    - Delivered in a guaranteed order (First In First Out).
+    - Can carry a small data payload (int or pointer) via `sigqueue()`.
+
+## 8. Signal Functions
+
+### 8.1. Changing Signal Dispositions: signal(), sigaction()
+
+#### 8.1.1. signal()
+```c
+void ( *signal(int sig, void (*handler)(int)) ) (int);
+/* Returns previous signal disposition on success, or SIG_ERR on error */
+```
+- `sig`: signal number
+- `handler`: a handler function (or `SIG_IGN` to ignore, `SIG_DFL` to reset to default)
+
+    ```c
+    void handler(int sig)
+    {
+    /* Code for the handler */
+    }
+    ```
+
+`signal()` behaves differently across Unix flavors => don't use it in real/portable code, use `sigaction()` instead
+
+#### 8.1.2. sigaction()
+
+```c
+int sigaction(int sig, const struct sigaction *act, struct sigaction *oldact);
+/* Returns 0 on success, or –1 on error */
+```
+
+```c
+struct sigaction {
+ void (*sa_handler)(int);   /* Address of handler */
+ sigset_t sa_mask;          /* Signals blocked during handler
+ invocation */
+ int sa_flags;              /* Flags controlling handler invocation */
+ void (*sa_restorer)(void); /* Not for application use */
+};
+```
+- `handler`: a handler function (or `SIG_IGN` to ignore, `SIG_DFL` to reset to default)
+- `sa_mask`: signals to auto-block only during handler execution (avoids getting interrupted mid-handler).
+- `sa_flags`:
+    - `SA_NOCLDSTOP`
+    - `SA_NOCLDWAIT`
+    - `SA_NODEFER`
+    - `SA_ONSTACK`
+    - `SA_RESETHAND`
+    - `SA_RESTART`
+    - `SA_SIGINFO`
+
+### 8.2. Sending Signals: kill(), raise(), killpg()
+
+```c
+int kill(pid_t pid, int sig);
+/* Returns 0 on success, or –1 on error */
+```
+- `pid`:
+    - `> 0`: send to that one process
+    - `== 0`: send to every process in caller's own process group
+    - `< -1`: send to every process in process group `abs(pid)`
+    - `== -1`: broadcast to every process caller has permission for (except PID 1 and the caller)
+
+```c
+int raise(int sig);
+/* Returns 0 on success, or nonzero on error */
+```
+`raise(sig)` is equivalent to `kill(getpid(), sig)`
+
+```c
+int killpg(pid_t pgrp, int sig);
+/* Returns 0 on success, or –1 on error */
+```
+
+`killpg(pgrp, sig)` is equivalent to `kill(-pgrp, sig)`
+
+### 8.3. Signal Sets
+
+```c
+int sigemptyset(sigset_t *set);
+int sigfillset(sigset_t *set); 
+int sigaddset(sigset_t *set, int sig);
+int sigdelset(sigset_t *set, int sig);
+/* Both return 0 on success, or –1 on error */
+```
+One of `sigemptyset()` or `sigaddset()` must be used to initialize a signal set:
+
+```c
+sigset_t set1;
+
+sigemptyset(&set1);
+sigaddset(&set1, SIGINT);
+```
+Now `set1` contains `SIGINT`
+
+```c
+int sigismember(const sigset_t *set, int sig); /* test if sig is a member of set */
+/* Returns 1 if sig is a member of set, otherwise 0 */
+
+int sigandset(sigset_t *dest, sigset_t *left, sigset_t *right); /* dest = intersection of left and right */
+int sigorset(sigset_t *dest, sigset_t *left, sigset_t *right); /* dest = union of left and right */
+/* Both return 0 on success, or –1 on error */
+
+int sigisemptyset(const sigset_t *set);
+/* Returns 1 if sig is empty, otherwise 0 */
+```
+
+### 8.4. Signal Mask
+
+A signal mask is a set of signals whose delivery to the process is currently blocked
+
+```c
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+/* Returns 0 on success, or –1 on error */
+```
+
+- `how`:
+    - `SIG_BLOCK`: add set to the mask
+    - `SIG_UNBLOCK`: remove set from the mask
+    - `SIG_SETMASK`: replace the mask outright with set
+    - `NULL`: read the current mask into `oldset`
+- `oldset`:
+    - for saving the mask before changing
+
+### 8.5. Pending Signals
+
+If a process receives a signal that it is currently blocking, that signal is added to the process’s set of pending signals
+
+`sigpending()` gets the set of signals that are pending for the calling process.
+
+```c
+int sigpending(sigset_t *set);
+/* Returns 0 on success, or –1 on error */
+```
+
+### 8.6. Waiting for a Signal: pause()
+
+`pause()` suspends the calling process until a signal handler interrupts
+
+```c
+int pause(void);
+/* Always returns –1 with errno set to EINTR */
+```
+
+---
+## 8. Lab
 
 ### Lab 1
 Implement a chat program between two processes over a pipe/FIFO 
