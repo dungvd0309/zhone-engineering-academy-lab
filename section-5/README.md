@@ -726,7 +726,102 @@ int semop(int semid, struct sembuf *sops, unsigned int nsops);
 
 ### 5.2. POSIX Semaphores
 
-Mentioned in [section 4](../section-4/)
+There are 2 types of POSIX Semaphores:
+- Named semaphore: 
+    - Has a name
+    - Calling `sem_open()` with the same name, unrelated processes can access the same semaphore.
+- Unnamed semaphore:
+    - Doesn't have a name
+    - Can be shared between processes or between a group of threads
+    - When shared between processes, must reside in a region of shared memory (System V, POSIX, `mmap()`)
+    - When shared between threads, reside in an area of memory shared by the threads (heap/global variable)
+
+|Interface|Semaphores|
+|-|-|
+|Header file|`<semaphore.h>`|
+|Object handle|`sem_t *`|
+|Create/open|`sem_open()`|
+|Close|`sem_close()`|
+|Unlink|`sem_unlink()`|
+|Perform IPC|`sem_post()`, `sem_wait()`, `sem_getvalue()`|
+|Miscellaneous operations|`sem_init()` - initialize unnamed semaphore <br>`sem_destroy()` - destroy unnamed semaphore|
+
+#### 5.2.1. Named Semaphore
+
+**Opening a Named Semaphore**: creates and opens a new named semaphore or opens an existing semaphore
+```c
+#include <fcntl.h> /* Defines O_* constants */
+#include <sys/stat.h> /* Defines mode constants */
+#include <semaphore.h>
+
+sem_t *sem_open(const char *name, int oflag, ...
+/* mode_t mode, unsigned int value */ );
+
+/* Returns pointer to semaphore on success, or SEM_FAILED on error */
+```
+
+**Closing a Semaphore**: terminates the association of the semaphore
+- Releases any resources of the semaphore for this process  
+- Decreases the count of processes referencing the semaphore
+- Closing a semaphore does not delete it
+```c
+int sem_close(sem_t *sem);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+**Removing a Named Semaphore**: removes the semaphore identified by `name` and marks the semaphore to be destroyed once all processes cease using it
+```c
+int sem_unlink(const char *name);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+#### 5.2.2. Unnamed Semaphore
+
+**Initializing an Unnamed Semaphore**:
+```c
+int sem_init(sem_t *sem, int pshared, unsigned int value);
+
+/* Returns 0 on success, or –1 on error */
+```
+- `pshared`:
+    - 0: shared between threads of the calling process
+    - nonzero: shared between processes 
+- `value`: initial value of the semaphore
+
+**Destroying an Unnamed Semaphore**:
+```c
+int sem_destroy(sem_t *sem);
+
+/* Returns 0 on success, or –1 on error */
+```
+- It is safe to destroy a semaphore only if no processes or threads are waiting on it.
+
+#### 5.2.3. Semaphore Operations
+
+**Waiting on a Semaphore**: Decreases the value of the semaphore `sem` by 1
+```c
+int sem_wait(sem_t *sem);
+int sem_trywait(sem_t *sem);
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+**Posting a Semaphore**: Increases the value of the semaphore `sem` by 1
+```c
+int sem_post(sem_t *sem);
+
+/* Returns 0 on success, or –1 on error */
+```
+
+**Retrieving the Value of a Semaphore**: returns the current value of the semaphore `sem` in the `int` pointed to by `sval`.
+```c
+int sem_getvalue(sem_t *sem, int *sval);
+
+/* Returns 0 on success, or –1 on error */
+```
 
 ---
 
@@ -824,7 +919,7 @@ struct shmid_ds {
 };
 ```
 
-#### **Example 1**: Shared memory is allocated in multiples of the system page size
+#### **Example**: Shared memory is allocated in multiples of the system page size
 
 Let's try creating a shared memory with only 10 bytes
 ```c
@@ -895,7 +990,7 @@ $ getconf PAGESIZE
 
 ### 6.2. POSIX Shared Memory
 
-To be continued...
+
 
 ### 6.3. Storing Pointers in Shared Memory
 
