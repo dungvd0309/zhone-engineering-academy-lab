@@ -687,6 +687,43 @@ struct semid_ds {
 };
 ```
 
+#### 5.1.3. Semaphore Operations
+
+`semop()` performs one or more operations on the semaphores in the semaphore `semid` set.
+
+```c
+int semop(int semid, struct sembuf *sops, unsigned int nsops);
+/* Returns 0 on success, or –1 on error */
+```
+
+- `sops`: an pointer to an array contains the operations to be performed
+    ```c
+    struct sembuf {
+        unsigned short sem_num; /* Semaphore number */
+        short sem_op; /* Operation to be performed */
+        short sem_flg; /* Operation flags (IPC_NOWAIT and SEM_UNDO) */
+    };
+    ```
+    - `sem_num`: which one in the set this `sem_op` applies to
+
+    - `sem_op`:
+
+        - `> 0`: Add value to semaphore. May wake up other blocked processes. Needs alter (write) permission.
+        - `== 0`: "Wait until zero" - checks if semaphore is 0 right now; if not, blocks until it is
+        - `< 0`: Try to subtract `abs(sem_op)`. If enough value is available, do it immediately. Otherwise block until it is. Needs (write) alter permission.
+
+- `nsops`: size of the array `sops` pointed to
+
+- `sem_flg`:
+
+    - `IPC_NOWAIT`: Non-blocking. Return `EAGAIN` instead of blocking.
+    - `SEM_UNDO`: Undoes the operation if the process terminates
+
+**When a blocked `semop()` call unblocks?**
+1. Another process changed the semaphore value enough to satisfy the operation.
+2. A signal interrupted it => fails with `EINTR` (`semop` is never auto-restarted after a signal)
+3. Another process deleted the semaphore set => fails with `EIDRM`
+
 ### 5.2. POSIX Semaphores
 
 Mentioned in [section 4](../section-4/)
@@ -1237,7 +1274,7 @@ pause();  /* Wait for SIGINT */
 
 To avoid this problem, we require a means of atomically unblocking a signal and suspending the process. That is the purpose of the `sigsuspend()` system call.
 
-#### 8.6.2 sigsuspend()
+#### 8.6.2. sigsuspend()
 
 ```c
 int sigsuspend(const sigset_t *mask);
@@ -1253,10 +1290,207 @@ sigprocmask(SIG_SETMASK, &prevMask, NULL); /* Restore old mask */
 ```
 
 ---
-## 8. Lab
+## 9. Lab
 
 ### Lab 1
-Implement a chat program between two processes over a pipe/FIFO 
+Implement a chat program between two processes over a pipe/FIFO
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h> 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <pthread.h>
+#include <string.h>
+
+char user_name[50];
+char friend_name[50];
+
+char fifo_send[100]; 
+char fifo_recv[100];
+char recv_buffer[254];
+
+pthread_t send_thread;
+pthread_t recv_thread;
+
+void* send_thread_func(void* arg) 
+{
+    char send_buffer[254];
+    while (1) 
+    {
+        /* Read input from the user */
+        if (fgets(send_buffer, sizeof(send_buffer), stdin) != NULL) 
+        {
+            /* Open the FIFO for writing */
+            int fd = open(fifo_send, O_WRONLY);
+            if (fd == -1) 
+            {
+                printf("%s is not online.\n", friend_name);
+                continue;
+            }
+
+            /* Write data to the FIFO */
+            write(fd, send_buffer, strlen(send_buffer));
+            printf("You -> %s: %s", friend_name, send_buffer);
+
+            /* Close the FIFO after writing */
+            close(fd);
+        }
+    }
+    return NULL;
+}
+
+void* recv_thread_func(void* arg) 
+{
+    while (1) 
+    {
+        /* Open the FIFO for reading */
+        int fd = open(fifo_recv, O_RDONLY);
+        if (fd == -1) 
+        {
+            perror("open fifo_recv");
+            printf("fifo_recv got deleted by accident?\n");
+            exit(-1);
+        }
+
+        /* Read data from the FIFO */
+        if(read(fd, recv_buffer, sizeof(recv_buffer) - 1) > 0)
+        {
+            printf("%s -> You: %s\n", friend_name, recv_buffer);
+        }
+
+        /* Close the FIFO after sender is done */
+        close(fd);
+    }
+    return NULL;
+}
+
+void cleanup_fifo(int sig) 
+{
+    unlink(fifo_recv); 
+    _exit(0);
+}
+
+int main(int argc, char *argv[]) 
+{
+    if (argc != 3) 
+    {
+        fprintf(stderr, "Usage: %s <your_name> <friend_name>\n", argv[0]);
+        return -1;
+    }
+
+    /* Store the user and friend names */
+    snprintf(user_name, sizeof(user_name), "%s", argv[1]);
+    snprintf(friend_name, sizeof(friend_name), "%s", argv[2]);
+
+    /* Name the FIFOs based on names*/
+    snprintf(fifo_send, sizeof(fifo_send), "%s_to_%s", argv[1], argv[2]);
+    snprintf(fifo_recv, sizeof(fifo_recv), "%s_to_%s", argv[2], argv[1]);
+
+    /* Create FIFOs */
+    // mkfifo(fifo_send, 0666);
+    mkfifo(fifo_recv, 0666); /* The client only create the receive FIFO */
+
+    /* Clean up the FIFO on exit */
+    signal(SIGINT, cleanup_fifo);
+    signal(SIGKILL, cleanup_fifo);
+
+    /* Create threads */
+    pthread_create(&send_thread, NULL, send_thread_func, NULL);
+    pthread_create(&recv_thread, NULL, recv_thread_func, NULL);
+     
+    pthread_join(send_thread, NULL);
+    pthread_join(recv_thread, NULL);
+
+    exit(0);
+}
+```
+
+Result:
+Let's run the program in 2 terminals
+
+```bash
+# Tom's POV
+$ ./lab_1 Tom Jerry
+```
+```bash
+# Jerry's POV
+$ ./lab_1 Jerry Tom
+```
+
+There will be 2 FIFOs appear in the current directory:
+```bash
+$ ls
+Jerry_to_Tom  lab_1
+Tom_to_Jerry  lab_1.c
+```
+
+Let's try to chat on both terminals:
+```bash
+# Tom's POV
+
+Hey Jerry
+You -> Jerry: Hey Jerry
+Jerry -> You: Hi Tom
+
+Can you go to my trap?
+You -> Jerry: Can you go to my trap?
+Jerry -> You: Hell nah
+```
+```bash
+# Jerry's POV
+
+Tom -> You: Hey Jerry
+Hi Tom                                                       You -> Tom: Hi Tom
+Tom -> You: Can you go to my trap?
+
+Hell nah!
+You -> Tom: Hell nah!
+```
+
+When a client ends the program:
+
+```bash
+# Jerry's POV
+
+# Jerry does a Ctrl-C
+```
+
+```bash
+# Tom's POV
+
+...
+Tom -> You: Can you go to my trap?
+
+:Pleaseeeeee
+Jerry is not online.
+HEEEYYYYY
+Jerry is not online
+```
+
+When that client opens the program again:
+```bash
+# Jerry's POV
+
+$ ./lab_1 Jerry Tom
+Hahahahaha
+You -> Tom: Hahahahaha
+Tom -> You: *sad*
+```
+
+```bash
+# Tom's POV
+
+...
+HEEEYYYYY
+Jerry is not online.
+Jerry -> You: Hahahahaha
+
+*sad*
+You -> Jerry: *sad*
+```
 
 ### Lab 2
 Implement producer-consumer via shared memory + semaphore 
