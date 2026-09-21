@@ -1716,7 +1716,7 @@ const size_t SHM_LENGTH = sizeof(struct shared_data);
 int fd;     /* File descriptor for shared memory */
 struct shared_data* addr;  /* Pointer to the shared memory */
 
-void handler(int signum) {
+void handler(int sig) {
     printf("Signal %d received. Cleaning up resource...\n", signum);
 
     /* Clean up semaphores */
@@ -1859,3 +1859,69 @@ Output:
 
 ### Lab 3
 Register a signal handler for SIGINT/SIGALRM; use strace to observe all the IPC-related syscalls 
+
+```c
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+
+void sigint_handler(int sig)
+{
+    printf("SIGINT received.\n");
+    _exit(0);
+}
+
+void sigalrm_handler(int sig)
+{
+    printf("SIGALRM received.\n");
+}
+
+int main()
+{
+    struct sigaction sa;
+
+    sa.sa_flags = 0;
+    sigfillset(&sa.sa_mask);
+
+    sa.sa_handler = sigint_handler;
+    sigaction(SIGINT, &sa, NULL);
+    sa.sa_handler = sigalrm_handler;
+    sigaction(SIGALRM, &sa, NULL);
+
+    printf("Set an alarm for 5 seconds.\n");
+    alarm(5); 
+    
+    printf("Waiting for signals...\n");
+    pause();
+    
+    return 0;
+}
+```
+
+Output:
+
+*Waiting for 5 seconds*
+```bash
+./lab_3
+Set an alarm for 5 seconds.
+Waiting for signals...
+SIGALRM received.
+```
+
+*Sending a SIGINT (Ctrl-C)*
+```bash
+$ ./lab_3
+Set an alarm for 5 seconds.
+Waiting for signals...
+^CSIGINT received.
+```
+
+`strace` to observe all the IPC-related syscalls:
+```bash
+$ strace -e trace=ipc ./lab_3
+Set an alarm for 5 seconds.
+Waiting for signals...
+--- SIGALRM {si_signo=SIGALRM, si_code=SI_KERNEL} ---
+SIGALRM received.
++++ exited with 0 +++
+```
