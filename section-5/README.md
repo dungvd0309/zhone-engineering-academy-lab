@@ -988,11 +988,108 @@ $ getconf PAGESIZE
 4096
 ```
 
-### 6.2. POSIX Shared Memory
+### 6.2. Memory Mapping
 
+#### 6.2.1. Creating a Mapping: mmap()
 
+`mmap()` creates a new memory mapping in the calling process’s virtual address space
+```c
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+/* Returns starting address of mapping on success, or MAP_FAILED on error */
+```
 
-### 6.3. Storing Pointers in Shared Memory
+- `addr`:
+    - `== NULL`: let kernel pick the address
+
+- `length`: size of the mapping in bytes
+    - the kernel creates mappings by rounding up `length` in multiples of the page size
+
+- `prot`: protection bit masks of the mapping
+    - `PROT_NONE`: The region may not be accessed
+    - `PROT_READ`: The contents of the region can be read
+    - `PROT_WRITE`: The contents of the region can be modified
+    - `PROT_EXEC`: The contents of the region can be executed
+
+- `flags`: 
+    - `MAP_PRIVATE`: Modifications to the contents of the region are not visible to other processes employing the same mapping
+    - `MAP_SHARED`: Modifications to the contents of the region are visible to other processes mapping the same region with the `MAP_SHARED` attribute
+
+#### 6.2.2. Unmapping a Mapped Region: munmap()
+
+```c
+int munmap(void *addr, size_t length);
+/* Returns 0 on success, or –1 on error */
+```
+- `addr`: the starting address of the address range to be unmapped, must be aligned to a page boundary.
+- `length`: bytes of the region to be unmapped, the address range up to the next multiple of the system page size will be unmapped.
+
+### 6.3. POSIX Shared Memory
+
+|Interface|Semaphores|
+|-|-|
+|Header file|`<mqueue.h>`|
+|Object handle|`mqd_t`|
+|Create/open|`mq_open()`|
+|Close|`mq_close()`|
+|Unlink|`mq_unlink()`|
+|Perform IPC|`mq_send()`, `mq_receive()`|
+|Miscellaneous operations|`mq_setattr()` - set attributes <br>`mq_getattr()` - get attributes <br>`mq_notify()` - request notification|
+
+#### 6.3.1. Creating Shared Memory Objects
+
+```c
+int shm_open(const char *name, int oflag, mode_t mode);
+/* Returns file descriptor on success, or –1 on error */
+```
+- `name`: name of the shared memory 
+
+- `oflag`:
+    - `O_CREAT`: Create object if it doesn’t already exist
+    - `O_EXCL`: With `O_CREAT`, create object exclusively
+    - `O_RDONLY`: Open for read-only access
+    - `O_RDWR`: Open for read-write access
+    - `O_TRUNC`: Truncate object to zero length
+
+- `mode`: permission bits
+
+#### 6.3.2. Removing Shared Memory Objects
+
+```c
+int shm_unlink(const char *name);
+/* Returns 0 on success, or –1 on error */
+```
+- Doesn’t affect existing mappings of the object.
+- Prevents further `shm_open()` calls from opening the object.
+- Once all processes have unmapped the object, the object is removed.
+
+#### 6.3.3. Using Shared Memory Objects
+
+```c
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+/* 1. Create/open the shared memory object */
+int fd = shm_open("/my_shm", O_CREAT | O_RDWR, 0666);
+
+/* 2. Size it */
+ftruncate(fd, 4096);
+
+/* 3. Map it into the address space */
+void *addr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+/* 4. Close the fd */
+close(fd);
+
+/* 5. ... use addr like a normal pointer ... */
+
+/* 6. Unmap and remove the shared memory */
+munmap(addr, 4096);
+shm_unlink("/my_shm");   // removes the name; object dies once last mapping goes away
+```
+
+### 6.4. Storing Pointers in Shared Memory
 
 Each process may employ different shared libraries and memory mappings, and may attach different sets of shared memory segments.
 
@@ -1538,7 +1635,8 @@ Jerry -> You: Hell nah
 # Jerry's POV
 
 Tom -> You: Hey Jerry
-Hi Tom                                                       You -> Tom: Hi Tom
+Hi Tom   
+You -> Tom: Hi Tom
 Tom -> You: Can you go to my trap?
 
 Hell nah!
