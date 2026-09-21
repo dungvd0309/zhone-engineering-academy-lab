@@ -429,7 +429,7 @@ It is **NOT possible** to:
 
 ### 4.1. System V Message Queues
 
-|Interface|Message queues|
+|Interface|System V Message queues|
 |-|-|
 |Header file|`<sys/msg.h>`|
 |Associated data structure|`msqid_ds`|
@@ -585,7 +585,7 @@ Received msg: 1234567890123456789
 
 ### 5.1. System V Semaphores
 
-|Interface|Semaphores|
+|Interface|System V Semaphores|
 |-|-|
 |Header file|`<sys/sem.h>`|
 |Associated data structure|`semid_ds`|
@@ -736,7 +736,7 @@ There are 2 types of POSIX Semaphores:
     - When shared between processes, must reside in a region of shared memory (System V, POSIX, `mmap()`)
     - When shared between threads, reside in an area of memory shared by the threads (heap/global variable)
 
-|Interface|Semaphores|
+|Interface|POSIX Semaphores|
 |-|-|
 |Header file|`<semaphore.h>`|
 |Object handle|`sem_t *`|
@@ -839,7 +839,7 @@ Processes should implement a **synchronization technique** to access a shared me
 
 ### 6.1. System V Shared Memory
 
-|Interface|Message queues|
+|Interface|System V Shared Memory|
 |-|-|
 |Header file|`<sys/shm.h>`|
 |Associated data structure|`msqid_ds`|
@@ -994,6 +994,7 @@ $ getconf PAGESIZE
 
 `mmap()` creates a new memory mapping in the calling process’s virtual address space
 ```c
+#include <sys/mman.h>
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 /* Returns starting address of mapping on success, or MAP_FAILED on error */
 ```
@@ -1014,6 +1015,9 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     - `MAP_PRIVATE`: Modifications to the contents of the region are not visible to other processes employing the same mapping
     - `MAP_SHARED`: Modifications to the contents of the region are visible to other processes mapping the same region with the `MAP_SHARED` attribute
 
+- `fd`: File descriptor of the file to map
+- 
+
 #### 6.2.2. Unmapping a Mapped Region: munmap()
 
 ```c
@@ -1025,15 +1029,14 @@ int munmap(void *addr, size_t length);
 
 ### 6.3. POSIX Shared Memory
 
-|Interface|Semaphores|
+|Interface|POSIX Shared Memory|
 |-|-|
-|Header file|`<mqueue.h>`|
-|Object handle|`mqd_t`|
-|Create/open|`mq_open()`|
-|Close|`mq_close()`|
-|Unlink|`mq_unlink()`|
-|Perform IPC|`mq_send()`, `mq_receive()`|
-|Miscellaneous operations|`mq_setattr()` - set attributes <br>`mq_getattr()` - get attributes <br>`mq_notify()` - request notification|
+|Header file|`<sys/mman.h>`|
+|Object handle|`int (file descriptor)`|
+|Create/open|`shm_open() + mmap()`|
+|Close|`munmap()`|
+|Unlink|`shm_unlink()`|
+|Perform IPC|operate on locations in shared region|
 
 #### 6.3.1. Creating Shared Memory Objects
 
@@ -1687,6 +1690,172 @@ You -> Jerry: *sad*
 
 ### Lab 2
 Implement producer-consumer via shared memory + semaphore 
+
+Summary:
+- Producer: When empty, create until full, then wait for the consumption.
+- Consumer: When full, consume until empty, then wait for the producer creation.
+
+```c
+#include <stdio.h>
+#include <unistd.h>
+#include <mqueue.h>
+#include <semaphore.h>
+#include <sys/mman.h>
+#include <signal.h>
+
+struct shared_data {
+    sem_t sem_full;
+    sem_t sem_empty;
+    int value;
+};
+
+const int MAX_SIZE = 5;
+const char SHM_NAME[] = "/my_shm";
+const size_t SHM_LENGTH = sizeof(struct shared_data);
+
+int fd;     /* File descriptor for shared memory */
+struct shared_data* addr;  /* Pointer to the shared memory */
+
+void handler(int signum) {
+    printf("Signal %d received. Cleaning up resource...\n", signum);
+
+    /* Clean up semaphores */
+    sem_destroy(&addr->sem_full);
+    sem_destroy(&addr->sem_empty);
+
+    /* Clean up shared memory */
+    munmap(addr, SHM_LENGTH);
+    shm_unlink(SHM_NAME);
+    _exit(0);
+}
+
+void init_signal()
+{
+    struct sigaction sa;
+    
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = handler; 
+    sa.sa_flags = 0;
+
+    sigaction(SIGINT, &sa, NULL);
+}
+
+void print_value(const char* name, const int value)
+{
+    printf("[%s] value = %i\n", name, value);
+}
+
+void producer(const char* name)
+{   
+    /* Creation of shared memory */
+    fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    ftruncate(fd, SHM_LENGTH);
+    addr = mmap(NULL, SHM_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (addr == MAP_FAILED) {
+        perror("mmap");
+        return;
+    }
+
+    /* Initialize binary semaphores */
+    sem_init(&addr->sem_empty, 1, 1);
+    sem_init(&addr->sem_full, 1, 0);
+    addr->value = 0;
+
+    while(1) 
+    {
+        sem_wait(&addr->sem_empty);
+
+        /* Produce items */
+        for(int i = 0; i < MAX_SIZE; i++) 
+        {
+            addr->value++;
+            print_value(name, addr->value);
+            usleep(500000);
+        }
+
+        sem_post(&addr->sem_full);
+    }
+
+    /* Removal of shared memory */
+    munmap(addr, SHM_LENGTH);
+    shm_unlink(SHM_NAME);
+}
+
+void consumer(const char* name)
+{   
+    /* Creation of shared memory */
+    fd = shm_open(SHM_NAME, O_RDWR, 0666);
+    ftruncate(fd, SHM_LENGTH);
+    addr = mmap(NULL, SHM_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (addr == MAP_FAILED) {
+        perror("mmap");
+        return;
+    }
+
+    while(1) 
+    {
+        sem_wait(&addr->sem_full);
+        
+        /* Consume items */
+        for(int i = 0; i < MAX_SIZE; i++) 
+        {
+            addr->value--;
+            print_value(name, addr->value);
+            usleep(500000);
+        }
+
+        sem_post(&addr->sem_empty);
+    }
+
+    /* Removal of shared memory */
+    munmap(addr, SHM_LENGTH);
+    shm_unlink(SHM_NAME);
+}
+
+int main() 
+{
+    init_signal();
+
+    switch(fork()) 
+    {
+        case -1:
+            perror("fork");
+            return -1;
+        case 0: // Child process
+            usleep(500000); // Ensure producer starts first
+            consumer("Consumer");
+            break;
+        default: // Parent process 
+            producer("Producer");
+            break;
+    }
+    return 0;
+}
+```
+Output:
+```
+[Producer] value = 1
+[Producer] value = 2
+[Producer] value = 3
+[Producer] value = 4
+[Producer] value = 5
+[Consumer] value = 4
+[Consumer] value = 3
+[Consumer] value = 2
+[Consumer] value = 1
+[Consumer] value = 0
+[Producer] value = 1
+[Producer] value = 2
+[Producer] value = 3
+[Producer] value = 4
+[Producer] value = 5
+[Consumer] value = 4
+[Consumer] value = 3
+[Consumer] value = 2
+[Consumer] value = 1
+[Consumer] value = 0
+...
+```
 
 ### Lab 3
 Register a signal handler for SIGINT/SIGALRM; use strace to observe all the IPC-related syscalls 
