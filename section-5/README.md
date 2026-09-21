@@ -578,6 +578,72 @@ Output:
 ```
 Received msg: 1234567890123456789
 ```
+### 4.2. POSIX Message Queues
+
+|Interface|POSIX Message Queues|
+|-|-|
+|Header file|`<mqueue.h>`|
+|Object handle|`mqd_t`|
+|Create/open|`mq_open()`|
+|Close|`mq_close()`|
+|Unlink|`mq_unlink()`|
+|Perform IPC|`mq_send()`, `mq_receive()`|
+|Miscellaneous operations|`mq_setattr()` - set attributes <br>`mq_getattr()` - get attributes <br>`mq_notify()` - request notification|
+
+#### 4.2.1. Opening, Closing, and Unlinking a Message Queue
+
+```c
+mqd_t mq_open(const char *name, int oflag, ...
+            /* mode_t mode, struct mq_attr *attr */);
+/* Returns a message queue descriptor on success, or (mqd_t) –1 on error */
+```
+- `name`: name of the msg queue
+
+- `oflag`:
+    - `O_CREAT`: Create queue if it doesn’t already exist
+    - `O_EXCL`: With `O_CREAT`, create queue exclusively
+    - `O_RDONLY`: Open for reading only
+    - `O_WRONLY`: Open for writing only
+    - `O_RDWR`: Open for reading and writing
+    - `O_NONBLOCK`: Open in nonblocking mode
+    
+- `mode`: permission bits
+- `attr`:
+    ```c
+    struct mq_attr {
+    long mq_flags; /* Message queue description flags: 0 or
+    O_NONBLOCK [mq_getattr(), mq_setattr()] */
+    long mq_maxmsg; /* Maximum number of messages on queue
+    [mq_open(), mq_getattr()] */
+    long mq_msgsize; /* Maximum message size (in bytes)
+    [mq_open(), mq_getattr()] */
+    long mq_curmsgs; /* Number of messages currently in queue
+    [mq_getattr()] */
+    };
+    ```
+
+```c
+int mq_close(mqd_t mqdes);
+int mq_unlink(const char *name);
+/* Returns 0 on success, or –1 on error */
+```
+
+#### 4.2.2. Exchanging Messages
+
+```c
+int mq_send(mqd_t mqdes, const char *msg_ptr, size_t msg_len, unsigned int msg_prio);
+/* Returns 0 on success, or –1 on error */
+```
+```c
+ssize_t mq_receive(mqd_t mqdes, char *msg_ptr, size_t msg_len, unsigned int *msg_prio);
+/* Returns number of bytes in received message on success, or –1 on error */
+```
+
+- `msg_len`: the length of the message pointed to by `msg_ptr`. Zero length are permitted
+
+- `msg_prio`: nonnegative integer priority for a message.
+    - Messages are ordered within the queue in descending order of priority (0 is the lowest priority).
+    - When a new message is added to the queue, it is placed after any other messages of the same priority.
 
 ---
 
