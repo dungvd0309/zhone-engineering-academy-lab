@@ -830,7 +830,7 @@ Ways to avoid deadlock:
 ---
 ## 12. Lab
 
-## Lab 1
+### Lab 1
 
 Create and join multiple threads sharing a counter; observe a race condition on the unprotected shared data
 
@@ -907,7 +907,7 @@ Example of 2 `counter++` instructions colliding:
 
 The counter result is 6 instead of 7.
 
-## Lab 2
+### Lab 2
 Fix the race condition using a mutex lock; verify correctness under load
 
 We fixed the race condition by protecting the critical section (`counter++`) using a mutex lock
@@ -955,10 +955,86 @@ $ ./lab_2
 Result: 2000000 (expected: 2000000)
 ```
 
-## Lab 3
+### Lab 3
 Test the reentrancy (thread-safety) of a self-written function and fix it if it is not reentrant
 
-## Lab 4
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <string.h>
+
+/* Non-reentrant function */
+char *get_message(const char *name)
+{
+    static char buffer[100]; /* Non-reentrant since using a static buffer */
+    snprintf(buffer, sizeof(buffer), "Hi, I'm %s", name);
+    sleep(1); /* Make the race easier to observe */
+
+    return buffer;
+}
+
+void *thread_func(void *arg)
+{
+    const char *name = (const char *)arg;
+    char *msg = get_message(name);
+    printf("[%s thread] %s\n", name, msg);
+
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t t1, t2;
+
+    pthread_create(&t1, NULL, thread_func, "Alice");
+    pthread_create(&t2, NULL, thread_func, "Bob");
+
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+
+    return 0;
+}
+```
+Output:
+```
+[Alice thread] Hi, I'm Bob
+[Bob thread] Hi, I'm Bob
+```
+=> Thread Alice returns the same shared buffer after Thread Bob has modified it.
+
+Let the caller provide the buffer instead:
+
+```c
+char *get_message(const char *name, char *buffer, size_t buffer_size) /* Reentrant function */
+{
+    snprintf(buffer, buffer_size, "Hi, I'm %s", name);
+    sleep(1);
+
+    return buffer;
+}
+
+void *thread_func(void *arg)
+{
+    const char *name = (const char *)arg;
+
+    char buffer[100]; /* The thread provides buffer */
+    char *msg = get_message(name, buffer, sizeof(buffer));
+    printf("[%s thread] %s\n", name, msg);
+
+    return NULL;
+}
+```
+
+Output:
+```
+[Alice thread] Hi, I'm Alice
+[Bob thread] Hi, I'm Bob
+```
+
+The program now work as intended.
+
+### Lab 4
 Implement a producer-consumer program using a mutex and a condition variable
 
 ```c
@@ -1045,7 +1121,7 @@ $ ./lab_4
 
 Producer and consumer's critical section are protected by a mutex. Consumer, which consuming 4 items, uses a conditional variable in order to wait for the producer creating >= 4 items.
 
-## Lab 5
+### Lab 5
 Reproduce a deadlock between two threads acquiring two locks in opposite order, then fix it via consistent lock ordering
 
 In this lab, we got:
