@@ -166,7 +166,29 @@ watch shared_counter thread 2
 
 ## 2. strace
 
-`strace` is a Linux command-line tool that intercepts and records system calls and signals made by a process to debug and analyze its behavior
+`strace` is a Linux command-line tool that intercepts and records system calls and signals made by a process to debug and analyze its behavior.
+
+| Flag | Purpose |
+|---|---|
+| `-f` | Follow forked child processes/threads |
+| `-ff` | Like `-f`, but writes each process's trace to a separate file (`-o` becomes a prefix) |
+| `-p <PID>` | Attach to an already-running process instead of launching one |
+| `-o <file>` | Write output to a file instead of `stderr` |
+| `-D` | Run the tracer as a grandchild, not a direct parent |
+| `-tt` | Print timestamp before each line |
+| `-T` | Show time spent inside each syscall |
+| `-r` | Print relative timestamp (time since previous line) instead of absolute |
+| `-e trace=open,read,write` | Only show these syscalls |
+| `-e trace=file` | All file-related syscalls (open, stat, access, chdir...) |
+| `-e trace=network` | All socket/network syscalls |
+| `-e trace=process` | fork, clone, execve, exit, wait... |
+| `-e trace=signal` | Signal delivery/handling |
+| `-e trace=memory` | mmap, brk, etc. |
+| `-e trace=desc` | File-descriptor-related calls (read/write/close/dup/select/poll...) |
+| `-e trace=%stat` | Just `stat`-family calls |
+| `-Z`<br>`-e status=failed` | Only print syscalls that failed |
+| `-e signal=!SIGCHLD` | Exclude noisy signals (e.g. `SIGCHLD` spam) |
+
 
 ## 3. Valgrind
 
@@ -325,7 +347,7 @@ $ valgrind ./use_after_free
 ...
 ```
 
-Block was alloc'd
+`Block was alloc'd` tells that the block had been alloc'd before then got freed
 
 ### 4.4. Uninitialized memory
 
@@ -589,7 +611,76 @@ instructions of `realloc()` in thread 1, causing it to fail
 ### Lab 3
 Run strace on a program that hangs or fails silently; use the syscall trace (files/sockets/processes/permissions/signals) to find the root cause
 
+```c
+#include <stdio.h>
+#include <unistd.h>
+
+int main() 
+{
+    int filedes[2];
+
+    pipe(filedes);
+
+    switch (fork()) 
+    {
+        case -1:
+            perror("fork");
+            return -1;
+
+        case 0: /* Child process */
+            // close(filedes[1]); /* Doesn't close unused write end */
+
+            /* Child now reads from pipe */
+            char buffer[100];
+            while(read(filedes[0], buffer, sizeof(buffer)) > 0)
+            {
+                printf("Received from parent: %s\n", buffer);
+            }
+
+            close(filedes[0]); /* Close read end after writing */
+            break;
+
+        default: /* Parent process */
+            close(filedes[0]); /* Close unused read end */
+
+            /* Parent now writes to pipe */
+            write(filedes[1], "Hello, child!", 14);
+
+            close(filedes[1]); /* Close write end after reading */
+            break;
+    }
+
+    return 0;
+}
+```
+
+Output:
+```
+$ ./lab_3
+Received from parent: Hello, child!
+```
+
+> The process ended successfully. Wasn't it?
+
+Yes! But only the parent process does. The child process is still hanging silently in the background:
+
+```c
+$ ps -x | grep lab_3
+  84505 pts/6    S      0:00 ./lab_3
+```
+
+Attach strace to its PID to debug:
+```bash
+$ sudo strace -f -tt -T -p 84505
+strace: Process 84505 attached
+09:53:09.756990 read(3
+```
+
+=> `read` syscall never returns a value => The process hangs forever
+
+Trace back onto our code we can see that the pipe's write end in child process never get closed, causing `read()` to block forever.
+
 ### Lab 4
 Run Valgrind (memcheck) on a program with a deliberately introduced memory leak and a use-after-free bug; interpret the report and fix both
 
-Mention in 4.
+Mentioned in [part 3](#3-valgrind)
