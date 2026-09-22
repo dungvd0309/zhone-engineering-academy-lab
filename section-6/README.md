@@ -466,6 +466,126 @@ $1 = 0x0
 ### Lab 2
 Debug a multi-threaded program with GDB (thread apply all bt) to locate a race-condition-induced crash
 
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+#define NUM_THREADS 2
+#define OPS_PER_THREAD 200000
+
+typedef struct {
+    int *data;
+    int size;
+    int capacity;
+} DynArray;
+
+DynArray arr;
+
+void arr_push(DynArray *a, int value) {
+    if (a->size == a->capacity) {
+        a->capacity *= 2;
+        a->data = realloc(a->data, a->capacity * sizeof(int));
+    }
+    a->data[a->size] = value;
+    a->size++;
+}
+
+void *worker(void *arg) {
+    long id = (long)arg;
+    for (int i = 0; i < OPS_PER_THREAD; i++) {
+        arr_push(&arr, (int)id);
+    }
+    return NULL;
+}
+
+int main(void) {
+    arr.capacity = 4;
+    arr.size = 0;
+    arr.data = malloc(arr.capacity * sizeof(int));
+
+    pthread_t threads[NUM_THREADS];
+    for (long i = 0; i < NUM_THREADS; i++)
+        pthread_create(&threads[i], NULL, worker, (void *)i);
+
+    for (int i = 0; i < NUM_THREADS; i++)
+        pthread_join(threads[i], NULL);
+
+    printf("Final size: %d (expected %d)\n", arr.size, NUM_THREADS * OPS_PER_THREAD);
+
+    long sum = 0;
+    for (int i = 0; i < arr.size; i++)
+        sum += arr.data[i];
+    printf("Sum: %ld\n", sum);
+
+    free(arr.data);
+    return 0;
+}
+```
+
+Output:
+```bash
+$ ./lab_2
+free(): invalid next size (normal)
+Segmentation fault         (core dumped) ./lab_2
+```
+
+Debug with core dump:
+
+```bash
+(gdb) thread apply all bt
+
+Thread 3 (Thread 0x7c97694b3740 (LWP 60216)):
+#0  __syscall_cancel_arch () at ../sysdeps/unix/sysv/linux/x86_64/syscall_cancel.S:56
+#1  0x00007c97692a030c in __internal_syscall_cancel (a1=a1@entry=136989745609960, a2=<optimized out>, a3=<optimized out>, a4=a4@entry=0, a5=a5@entry=0, a6=a6@entry=4294967295, nr=202) at ./nptl/cancellation.c:49
+#2  0x00007c97692a06e7 in __futex_abstimed_wait_common64 (private=128, futex_word=0x7c97691ffce8, expected=<optimized out>, op=265, abstime=0x0, cancel=true) at ./nptl/futex-internal.c:57
+#3  __futex_abstimed_wait_common (futex_word=0x7c97691ffce8, expected=<optimized out>, clockid=0, abstime=0x0, private=128, cancel=true) at ./nptl/futex-internal.c:87
+#4  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x7c97691ffce8, expected=<optimized out>, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=128) at ./nptl/futex-internal.c:139
+#5  0x00007c97692a5dd9 in __pthread_clockjoin_ex (threadid=136989745608384, thread_return=0x0, clockid=0, abstime=0x0, cancel=<optimized out>) at ./nptl/pthread_join_common.c:66
+#6  0x0000580dab53f38d in main () at lab_2.c:43
+
+Thread 2 (Thread 0x7c97689fe6c0 (LWP 60218)):
+#0  0x0000580dab53f283 in arr_push (a=0x580dab542020 <arr>, value=1) at lab_2.c:21
+#1  0x0000580dab53f2d1 in worker (arg=0x1) at lab_2.c:28
+#2  0x00007c97692a3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#3  0x00007c97693375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+
+Thread 1 (Thread 0x7c97691ff6c0 (LWP 60217)):
+#0  __pthread_kill_implementation (threadid=<optimized out>, signo=6, no_tid=0) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (threadid=<optimized out>, signo=6) at ./nptl/pthread_kill.c:89
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:100
+#3  0x00007c9769245b7e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007c97692288ec in __GI_abort () at ./stdlib/abort.c:77
+#5  0x00007c9769229979 in __libc_message_impl (vma_name=vma_name@entry=0x7c97693db569 "glibc: fatal", fmt=fmt@entry=0x7c97693debbe "%s\n") at ../sysdeps/posix/libc_fatal.c:138
+#6  0x00007c97692b08ac in __libc_message_wrapper (vmaname=0x7c97693db569 "glibc: fatal", fmt=0x7c97693debbe "%s\n") at ../include/stdio.h:203
+#7  malloc_printerr (str=str@entry=0x7c97693e1648 "free(): invalid next size (normal)") at ./malloc/malloc.c:5341
+#8  0x00007c97692b2254 in _int_free_merge_chunk (av=0x7c9769412ac0 <main_arena>, p=0x580db618e260, size=131088) at ./malloc/malloc.c:4428
+#9  0x00007c97692b2329 in _int_free_chunk (av=<optimized out>, p=<optimized out>, size=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4368
+#10 0x00007c97692b4379 in _int_realloc (av=av@entry=0x7c9769412ac0 <main_arena>, oldp=oldp@entry=0x580db618e260, oldsize=131088, nb=262160) at ./malloc/malloc.c:4642
+#11 0x00007c97692b579f in __GI___libc_realloc (oldmem=0x580db618e270, bytes=<optimized out>) at ./malloc/malloc.c:3480
+#12 0x0000580dab53f262 in arr_push (a=0x580dab542020 <arr>, value=0) at lab_2.c:19
+#13 0x0000580dab53f2d1 in worker (arg=0x0) at lab_2.c:28
+#14 0x00007c97692a3dfa in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:454
+#15 0x00007c97693375cc in __GI___clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:78
+```
+
+The log shows that:
+- Thread 3 (main thread), thread 1 + 2 (2 worker threads)
+- Thread 1 stopped at `lab_2.c:19` (frame #12):
+    ```c
+    19 a->data = realloc(a->data, a->capacity * sizeof(int));
+    ```
+- Thread 2 stopped at `lab_2.c:21` (frame #0):
+    ```c
+    21 a->data[a->size] = value;
+    ```
+- Thread 1 failed: It called `abort` (frame #4) after trying to `free` the old array (frame #9)
+
+=> Write operation in thread 2 collided with
+instructions of `realloc()` in thread 1, causing it to fail
+
+=> Solution: A mutex lock should be used to protect this critical section `arr_push(&arr, (int)id);`
+
 ### Lab 3
 Run strace on a program that hangs or fails silently; use the syscall trace (files/sockets/processes/permissions/signals) to find the root cause
 
