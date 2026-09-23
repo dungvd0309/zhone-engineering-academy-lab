@@ -9,7 +9,14 @@
 **Expectation**: Debugging report covering all three tools: one crash root-caused with GDB (including a core dump), one hang/failure diagnosed with strace, and one memory bug found with Valgrind
 
 ---
+## Table of Content
 
+1. [GDB](#1-gdb)
+2. [Strace](#2-strace)
+3. [Valgrind](#3-valgrind)
+4. [Lab](#4-lab)
+
+---
 ## 1. GDB
 
 GDB, the GNU Project debugger, allows you to see what is going on `inside' another program while it executes - or what another program was doing at the moment it crashed.
@@ -188,7 +195,6 @@ watch shared_counter thread 2
 | `-e trace=%stat` | Just `stat`-family calls |
 | `-Z`<br>`-e status=failed` | Only print syscalls that failed |
 | `-e signal=!SIGCHLD` | Exclude noisy signals (e.g. `SIGCHLD` spam) |
-
 
 ## 3. Valgrind
 
