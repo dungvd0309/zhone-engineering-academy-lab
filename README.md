@@ -10,3 +10,4 @@ A repo for my notes, lab work in Zhone Engineering Academy 2026 program.
 - [Section 4: Threads & Synchronization](./section-4/)
 - [Section 5: IPC: Pipes, FIFOs, Message Queues, Shared Memory, Signals](./section-5/)
 - [Section 6: Userspace Debugging Toolkit: GDB, strace & Valgrind](./section-6/)
+- [Section 7: Socket Programming - TCP/UDP Sockets & I/O Multiplexing](./section-7/)
