@@ -503,7 +503,75 @@ socket is closed by the kernel. This sends a `FIN` to the server.
 
 ### 5.10. SIGPIPE Signal
 
+When a process writes to a socket that has received an `RST`, the `SIGPIPE` signal is sent to the process.
+
+The default action of this signal is to terminate the process, so the process must catch the signal to avoid being involuntarily terminated.
+
 ### 5.11. Server/Client Crash Scenarios
+
+## 6. UDP Sockets
+
+![udp.png](./img/udp.png)
+
+### 6.1. recvfrom and sendto Functions
+
+```c
+#include <sys/socket.h>
+
+ssize_t recvfrom(int sockfd, void *buff, size_t nbytes, int flags,
+                 struct sockaddr *from, socklen_t *addrlen);
+
+ssize_t sendto(int sockfd, const void *buff, size_t nbytes, int flags,
+               const struct sockaddr *to, socklen_t addrlen);
+
+/* Both return: number of bytes read or written if OK, −1 on error */
+```
+
+- `flags`: 
+    - Usually `0`
+    - `MSG_PEEK`
+    - `MSG_DONTWAIT`
+- `from`, `to`: a socket address structure containing the protocol address of where the data is to be received/sent.
+- `addrlen`: size of `from`, `to`
+
+### 6.2. Lost Datagrams
+
+UDP is not reliable.
+
+If a client datagram is dropped by a router, or if the server's reply is lost in transit, the client blocks forever in `recvfrom()` waiting for a response that will never arrive.
+
+A typical way to prevent this is to place a timeout on the client’s call to `recvfrom`.
+
+### 6.3. connect() with UDP
+
+Calling `connect()` on a UDP socket involves no handshake. The kernel checks for errors, records the peer's IP address and port, and returns right aways.
+
+A *connected* UDP socket compared to an *unconnected* UDP socket:
+
+- **Sending**: Use `write`/`send` instead of `sendto`. If calling `sendto`, the address pointer must be `NULL`, and the length 0.
+
+- **Receiving**: Use `read`/`recv`/`recvmsg` instead of `recvfrom`. The kernel delivers only datagrams from the connected peer, so the socket talks to exactly one peer.
+
+- **Errors**: Asynchronous errors (e.g., ICMP port unreachable) are reported to the process. Unconnected UDP sockets never receive them.
+
+|Type of socket|`write` or `send`|`sendto` that does no specify a destination|`sendto` that specifies a destination|
+|-|-|-|-|
+|TCP socket|OK|OK|`EISCONN`|
+|UDP socket, connected|OK|OK|`EISCONN`|
+|UDP socket, unconnected|`EDESTADDRREQ`|`EDESTADDRREQ`|OK|
+
+**When to connect**: Only when the socket talks to exactly one peer. Clients usually do this.
+
+**Calling `connect` multiple times**: Unlike TCP, a UDP socket can call `connect` again to:
+
+- Change to a new peer.
+- Unconnect it, by passing an address struct's family member with `AF_UNSPEC`.
+
+**Performance**:
+
+- On an unconnected UDP socket, Berkeley-derived kernels temporarily connect, send, and unconnect for every `sendto`.
+
+- Connecting explicitly once and then calling write repeatedly avoids this overhead.
 
 ## Lab 
 
