@@ -573,6 +573,121 @@ A *connected* UDP socket compared to an *unconnected* UDP socket:
 
 - Connecting explicitly once and then calling write repeatedly avoids this overhead.
 
+## 7. Socket Operations
+
+### 7.1. getsockopt and setsockopt Functions
+
+```c
+#include <sys/socket.h>
+
+int getsockopt(int sockfd, int level, int optname,  void *optval, socklen_t *optlen);
+
+int setsockopt(int sockfd, int level, int optname,  const void *optval, socklen_t optlen);
+
+/* Both return: 0 if OK, −1 on error */
+```
+
+- `sockfd`: an open socket descriptor
+- `level`: which code in the system interprets the option, either the general socket code or some protocol-specific code (e.g., IPv4, IPv6, TCP, or SCTP)
+- `optname`: the option being queried or set.
+- `optval`: A pointer to a variable. `setsockopt` reads the new value from it, and `getsockopt` stores the current value into it.
+- `optlen`: The size of that variable. It is passed by value to `setsockopt` and as a value-result argument to `getsockopt`.
+
+Two basic types of options:
+- Flags (binary options):
+    - `*optval` is zero: disabled
+    - `*optval` is non-zero: enabled
+- Values
+
+### 7.2. Generic Socket Options
+
+Level: `SOL_SOCKET`
+
+|optname|Description|
+|-|-|
+|SO_BROADCAST|Permit sending of broadcast datagrams | int|
+|SO_DEBUG|Enable debug tracing | int|
+|SO_DONTROUTE|Bypass routing table lookup | int|
+|SO_ERROR|Get pending error and clear | int|
+|SO_KEEPALIVE|Periodically test if connection still alive | int|
+|SO_LINGER|Linger on close if data to send | linger{}|
+|SO_OOBINLINE|Leave received out-of-band data inline | int|
+|SO_RCVBUF|Receive buffer size | int|
+|SO_SNDBUF|Send buffer size | int|
+|SO_RCVLOWAT|Receive buffer low-water mark | int|
+|SO_SNDLOWAT|Send buffer low-water mark | int|
+|SO_RCVTIMEO|Receive timeout | timeval{}|
+|SO_SNDTIMEO|Send timeout | timeval{}|
+|SO_REUSEADDR|Allow local address reuse | int|
+|SO_REUSEPORT|Allow local port reuse | int|
+|SO_TYPE|Get socket type | int|
+|SO_USELOOPBACK|Routing socket gets copy of what it sends | int|
+
+### 7.3. IPv4 Socket Options
+
+Level: `IPPROTO_IP`
+
+|optname|Description|Datatype|
+|-|-|-|
+|IP_HDRINCL|IP header included with data |int|
+|IP_OPTIONS|IP header options |byte array|
+|IP_RECVDSTADDR|Return destination IP address |int|
+|IP_RECVIF|Return received interface index |int|
+|IP_TOS|Type-of-service and precedence |int|
+|IP_TTL|TTL |int|
+
+
+### 7.4. TCP Socket Options
+
+Level: `IPPROTO_TCP`
+
+|optname|Description|Datatype|
+|-|-|-|
+|TCP_MAXSEG| TCP maximum segment size |int|
+|TCP_NODELAY| Disable Nagle algorithm |int|
+
+### 7.5. fcntl Function
+
+`fcntl` (file control) changes settings on a file descriptor. A socket is a kind of descriptor.
+
+```c
+#include <fcntl.h>
+
+int fcntl(int fd, int cmd, ... /* int arg */ );
+
+/* Returns: depends on cmd if OK, −1 on error */
+```
+
+- fd: a file descriptor 
+- cmd: a command
+- arg: an optional third argument (depends on cmd)
+
+**`fcntl` for sockets:**
+- **Get/set flags**: `F_GETFL`, `F_SETFL`
+- **Nonblocking I/O** (`O_NONBLOCK`): read/write calls returns right away instead of waiting.
+- **Signal-driven I/O** (`O_ASYNC`): the system sends a SIGIO signal when the socket's status changes.
+- **Socket owner**: `F_SETOWN` to choose which process (or process group) receives the `SIGIO` and `SIGURG` signals. `F_GETOWN` tells the current owner.
+
+**Safe ways to set flags with `fcntl`:**
+```c
+int flags;
+
+/* Get the current flags */
+if ((flags = fcntl(fd, F_GETFL, 0)) < 0)
+    err_sys("F_GETFL error");
+
+/* Add a flag (keeps all other flags) */
+flags |= O_NONBLOCK;
+
+/* Set the new flags */
+if (fcntl(fd, F_SETFL, flags) < 0)
+    err_sys("F_SETFL error");
+```
+
+
+## 8. I/O Multiplexing
+
+
 ## Lab 
 
 ### Lab 1
