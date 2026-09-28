@@ -13,13 +13,13 @@
 const int MAX_BUFFER = 4096;
 
 int   cli_port     = 0; /* 0: Kernel-assigned port */
-char  serv_ip[]    = "127.0.0.1";
+char  serv_ip[15]    = "127.0.0.1";
 int   serv_port    = 8080;
 
 int sockfd, len;
 struct sockaddr_in servaddr, cliaddr;
 
-void sigint_handler(int signum)
+void sig_int(int signum)
 {
     close(sockfd);
     _exit(0);
@@ -32,7 +32,11 @@ void str_cli(FILE *fp, int sockfd)
     while(fgets(send_buf, MAX_BUFFER, fp) != NULL)
     {
         write(sockfd, send_buf, strlen(send_buf));
-        read(sockfd, read_buf, MAX_BUFFER);
+        if(read(sockfd, read_buf, MAX_BUFFER) == 0)
+        {
+            printf("Server terminated prematurely\n");
+            exit(-1);
+        }
         printf("Server echo: %s", read_buf);
     }
 }
@@ -40,14 +44,13 @@ void str_cli(FILE *fp, int sockfd)
 int main(int argc, char *argv[])
 {
     if(argc > 1)
-    {
         cli_port = atoi(argv[1]); /* Custom client port */
-    }
+    if(argc > 2)
+        strcpy(serv_ip, argv[2]); /* Custom server IP */
+    if(argc > 3)
+        serv_port = atoi(argv[3]); /* Custom server port */
 
-    signal(SIGPIPE, sigint_handler);
-
-    uint32_t s_addr;
-    inet_pton(AF_INET, serv_ip, (void *)&s_addr);
+    signal(SIGINT, sig_int);
 
     /* Create a socket */
     sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -67,8 +70,9 @@ int main(int argc, char *argv[])
     }
 
     /* Configure the server address */
+    inet_pton(AF_INET, serv_ip, 
+            (void *)&servaddr.sin_addr.s_addr);
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = s_addr;
     servaddr.sin_port = htons(serv_port);
 
     /* Connect to the server */

@@ -10,12 +10,20 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 const char  IP_ADDRESS[]    = "0.0.0.0";
 const int   PORT            = 8080;
 
 const int   MAX_CONNECTIONS = 5;
 const int   MAX_BUFFER      = 4096;
+
+void sig_chld(int sig)
+{
+    while( waitpid(-1, NULL, WNOHANG) > 0 ) {};
+
+    return;
+}
 
 void print_server_info(struct sockaddr_in *servaddr)
 {
@@ -65,16 +73,18 @@ int main()
     struct sockaddr_in servaddr, cliaddr;
     int yes=1;
 
-    uint32_t s_addr;
-    inet_pton(AF_INET, IP_ADDRESS, (void *)&s_addr);
+    signal(SIGCHLD, sig_chld);
 
-    /* Server socket address initialization */
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = s_addr;
-    servaddr.sin_port = htons(PORT);
-
+    /* Socket init */
     listenfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+
+    /* Configure the server address */
+    memset(&servaddr, 0, sizeof(servaddr));
+    inet_pton(AF_INET, IP_ADDRESS, 
+            (void *)&servaddr.sin_addr.s_addr);
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(PORT);
 
     /* Bind the socket to the server address */
     if(bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) 
