@@ -238,7 +238,7 @@ Network representation: d2029649
 Host prints network value: 3523384905
 ```
 
-#### 3.6.4. inet_aton, inet_addr, inet_ntoa Functions
+### 3.7. inet_aton, inet_addr, inet_ntoa Functions
 
 These functions convert an IPv4 address from a dotted-decimal string to its 32-bit network byte ordered binary value. (e.g. `"192.168.1.1"` to `0101a8c0`)
 
@@ -255,7 +255,7 @@ char *inet_ntoa(struct in_addr inaddr);
 /* Returns: pointer to dotted-decimal string */
 ```
 
-#### 3.6.5. inet_pton, inet_ntop Functions
+### 3.8. inet_pton, inet_ntop Functions
 
 These two functions are new with IPv6 and work with both IPv4 and IPv6 addresses.
 
@@ -273,9 +273,9 @@ const char *inet_ntop(int family, const void *addrptr, char *strptr, size_t len)
 
 - `family`: either `AF_INET` (IPv4) or `AF_INET6` (IPv6)
 
-### 4. TCP Sockets
+## 4. TCP Sockets
 
-#### 4.1. socket Function
+### 4.1. socket Function
 
 To perform network I/O, the first thing a process must do is call the socket function
 
@@ -319,7 +319,7 @@ Combinations of `family` and `type` for the `socket` function:
 |`SOCK_SEQPACKET`|SCTP|SCTP|Yes|||
 |`SOCK_RAW`|IPv4|IPv6||Yes|Yes|
 
-#### 4.2. connect Function
+### 4.2. connect Function
 
 The `connect` function is used by a *TCP client* to *establish a connection* with a *TCP server*.
 
@@ -331,9 +331,17 @@ int connect(int sockfd, const struct sockaddr *servaddr, socklen_t addrlen);
 /* Returns: 0 if OK, −1 on error */
 ```
 
-- `sockfd`: a socket descriptor returned by the `socket` function
+The client does not have to call `bind` before calling `connect`: the kernel will choose both an ephemeral port and the source IP address
 
-#### 4.3. bind Function
+Error returns:
+
+- `ETIMEOUT`: Client retransmits SYN several times at at 0s, 6s, 24s (4.4BSD). If no response is received after a total of 75 seconds, the error is returned.
+
+- `ECONNREFUSED`: Server responds with RST - no process listening on that port
+
+- `EHOSTUNREACH` / `ENETUNREACH`: An intermediate router returns an ICMP "destination unreachable"
+
+### 4.3. bind Function
 
 The `bind` function assigns a local protocol address to a socket.
 
@@ -344,10 +352,22 @@ int bind(int sockfd, const struct sockaddr *myaddr, socklen_t addrlen);
 
 /* Returns: 0 if OK, −1 on error */
 ```
+- IP address:
+    - Wildcard (`INADDR_ANY`, `"0.0.0.0"`, `0`): Kernel chooses IP address
+    - Local IP address: Process specifies IP address
+- Port:
+    - `0`: Kernel chooses port
+    - nonzero: Process chooses port
 
-#### 4.4. listen Function
+`bind` can't return the kernel-assigned port (`myaddr` argument is const) => we have to use `getsockname()` to retrieve it.
 
-The `listen` function is called only by a TCP server and it performs two actions:
+Error returns:
+
+- `EADDRINUSE`: Address already in use
+
+### 4.4. listen Function
+
+The `listen` function is called only by a TCP server, it moves the socket from the CLOSED state to the LISTEN state.
 
 ```c
 #include <sys/socket.h>
@@ -359,7 +379,21 @@ int listen(int sockfd, int backlog);
 
 - `backlog`: the maximum number of connections the kernel should queue for this socket.
 
-#### 4.5. accept Function
+The kernel maintains two queues:
+- **Incomplete connection queue** (SYN queue): 
+    - Contains an entry for each SYN that has arrived from a client. 
+    - These sockets are in the SYN_RCVD state.
+-  **Completed connection queue**:
+    - Contains an entry for each client with whom the TCP three-way handshake has completed. 
+    - These sockets are in the ESTABLISHED state.
+
+The connection creation mechanism is completely automatic by the kernel; the server process is not involved.
+
+### 4.5. accept Function
+
+`accept` is called by a TCP server to return a connection from the front of *the completed connection queue* of the kernel.
+
+If the completed queue is empty, the process is put to sleep
 
 ```c
 #include <sys/socket.h>
@@ -369,22 +403,170 @@ int accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen);
 /* Returns: 0 if OK, −1 on error */
 ```
 
-### Lab 
+### 4.6. close Function
 
-#### Lab 1
+The normal Unix `close` function is also used to close a socket and terminate a TCP connection.
+
+```c
+#include <unistd.h>
+
+int close(int sockfd);
+
+/* Returns: 0 if OK, −1 on error */
+```
+
+TCP will still try to send any queued data first, then perform the normal TCP connection termination sequence.
+
+Calling `close()` decrements the reference count of the descriptor. When the reference count is 0, the TCP connection is terminated.
+
+### 4.7. Concurrent Servers
+
+When a client request can take longer to service, we don't want it to block other clients.
+
+A concurrent server can handle multiple clients at the same time by `fork` a child process to handle each client.
+
+```c
+listenfd = Socket(...);
+Bind(listenfd, ...);
+Listen(listenfd, LISTENQ);
+
+for ( ; ; ) {
+    connfd = Accept(listenfd, ...);      /* blocks until a client connects */
+    if ((pid = Fork()) == 0) {
+        Close(listenfd);    /* child doesn't need the listening socket */S
+        doit(connfd);       /* process the request */
+        Close(connfd);      /* done with this client */
+        exit(0);            /* child terminates */
+    }
+    Close(connfd);          /* parent closes connected socket */
+}
+```
+
+1. Before `accept` returns, a connection request arrives from the client:
+
+    ![concurrent_server_1.png](./img/concurrent_server_1.png)
+
+2. After `accept` return, the connection is accepted by the kernel, and a `connfd` is created:
+
+    ![concurrent_server_2.png](./img/concurrent_server_2.png)
+
+3. After `fork`, `listenfd` and `connfd`, are duplicated between the parent and child:
+
+    ![concurrent_server_3.png](./img/concurrent_server_3.png)
+
+4. The parent to close the connected socket `connfd` and the child to close the listening socket `listenfd`:
+
+    ![concurrent_server_4.png](./img/concurrent_server_4.png)
+
+### 4.8. getsockname and getpeername Functions
+
+Retrieve the protocol address associated with a socket - local address (`getsockname`) or the peer's address (`getpeername`)
+
+```c
+#include <sys/socket.h>
+
+int getsockname(int sockfd, struct sockaddr *localaddr, socklen_t *addrlen);
+
+int getpeername(int sockfd, struct sockaddr *peeraddr, socklen_t *addrlen);
+
+/* Both return: 0 if OK, −1 on error */
+```
+
+## Lab 
+
+### Lab 1
 Write a concurrent TCP echo server (fork-per-connection) plus a client 
 
-#### Lab 2
+[Link to lab 1](./lab/lab_1/)
+
+**Result**:
+
+Open the server with port 8080:
+```bash
+$ ./server
+Server IP: 0.0.0.0
+Server Port: 8080
+```
+
+Connect 3 clients to the server with port 3001, 3002, 3003, respectively:
+
+```bash
+$ ./client 3001
+```
+```bash
+$ ./client 3002
+```
+```bash
+$ ./client 3003
+```
+
+```bash
+$ ./server
+...
+[127.0.0.1:3001] Connected
+[127.0.0.1:3002] Connected
+[127.0.0.1:3003] Connected
+```
+
+Send messages from each clients:
+```bash
+$ ./server
+...
+[127.0.0.1:3001] sent 6 bytes: Hello
+
+[127.0.0.1:3002] sent 3 bytes: Hi
+
+[127.0.0.1:3003] sent 10 bytes: Hiiiiiiii
+
+[127.0.0.1:3001] sent 13 bytes: How are you?
+```
+
+```bash
+$ ./client 3001  
+Connecting to the server 127.0.0.1:8080 
+Connected to the server!
+Hello
+Server echo: Hello
+How are you?
+Server echo: How are you? 
+```
+
+```bash
+$ ./client 3002  
+Connecting to the server 127.0.0.1:8080 
+Connected to the server!
+Hi
+Server echo: Hi
+```
+
+```bash
+$ ./client 3003
+Connecting to the server 127.0.0.1:8080 
+Connected to the server!
+Hiiiiiiii
+Server echo: Hiiiiiiii
+```
+
+Close 3 clients:
+```bash
+$ ./server
+...
+[127.0.0.1:3001] Closed connection
+[127.0.0.1:3002] Closed connection
+[127.0.0.1:3003] Closed connection
+```
+
+### Lab 2
 Test failure scenarios: server crash, client crash, and correct handling of SIGPIPE 
 
-#### Lab 3
+### Lab 3
 Write a UDP echo server/client 
 
-#### Lab 4
+### Lab 4
 Build a chat-room server first using select(), then rebuild it using poll(), and compare the code 
 
-#### Lab 5
+### Lab 5
 Rebuild the chat-room server once more using epoll (edge-triggered, non-blocking sockets) 
 
-#### Lab 6
+### Lab 6
 Combine multiplexing with a small thread pool (threads + poll/epoll) to handle many simultaneous connections
