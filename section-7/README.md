@@ -273,9 +273,25 @@ const char *inet_ntop(int family, const void *addrptr, char *strptr, size_t len)
 
 - `family`: either `AF_INET` (IPv4) or `AF_INET6` (IPv6)
 
-## 4. TCP Sockets
+## 4. TCP Connection
 
-### 4.1. socket Function
+### 4.1. Three-way handshake
+
+![tcp_1.png](./img/tcp_1.png)
+
+### 4.2. TCP Connection Termination
+
+![tcp_2.png](./img/tcp_2.png)
+
+### 4.3. TCP State
+
+![tcp_3.png](./img/tcp_3.png)
+
+![tcp_4.png](./img/tcp_4.png)
+
+## 5. TCP Sockets
+
+### 5.1. socket Function
 
 To perform network I/O, the first thing a process must do is call the socket function
 
@@ -319,7 +335,7 @@ Combinations of `family` and `type` for the `socket` function:
 |`SOCK_SEQPACKET`|SCTP|SCTP|Yes|||
 |`SOCK_RAW`|IPv4|IPv6||Yes|Yes|
 
-### 4.2. connect Function
+### 5.2. connect Function
 
 The `connect` function is used by a *TCP client* to *establish a connection* with a *TCP server*.
 
@@ -341,7 +357,7 @@ Error returns:
 
 - `EHOSTUNREACH` / `ENETUNREACH`: An intermediate router returns an ICMP "destination unreachable"
 
-### 4.3. bind Function
+### 5.3. bind Function
 
 The `bind` function assigns a local protocol address to a socket.
 
@@ -365,7 +381,7 @@ Error returns:
 
 - `EADDRINUSE`: Address already in use
 
-### 4.4. listen Function
+### 5.4. listen Function
 
 The `listen` function is called only by a TCP server, it moves the socket from the CLOSED state to the LISTEN state.
 
@@ -389,7 +405,7 @@ The kernel maintains two queues:
 
 The connection creation mechanism is completely automatic by the kernel; the server process is not involved.
 
-### 4.5. accept Function
+### 5.5. accept Function
 
 `accept` is called by a TCP server to return a connection from the front of *the completed connection queue* of the kernel.
 
@@ -403,7 +419,7 @@ int accept(int sockfd, struct sockaddr *cliaddr, socklen_t *addrlen);
 /* Returns: 0 if OK, −1 on error */
 ```
 
-### 4.6. close Function
+### 5.6. close Function
 
 The normal Unix `close` function is also used to close a socket and terminate a TCP connection.
 
@@ -419,7 +435,7 @@ TCP will still try to send any queued data first, then perform the normal TCP co
 
 Calling `close()` decrements the reference count of the descriptor. When the reference count is 0, the TCP connection is terminated.
 
-### 4.7. Concurrent Servers
+### 5.7. Concurrent Servers
 
 When a client request can take longer to service, we don't want it to block other clients.
 
@@ -454,11 +470,11 @@ for ( ; ; ) {
 
     ![concurrent_server_3.png](./img/concurrent_server_3.png)
 
-4. The parent to close the connected socket `connfd` and the child to close the listening socket `listenfd`:
+5. The parent to close the connected socket `connfd` and the child to close the listening socket `listenfd`:
 
     ![concurrent_server_4.png](./img/concurrent_server_4.png)
 
-### 4.8. getsockname and getpeername Functions
+### 5.8. getsockname and getpeername Functions
 
 Retrieve the protocol address associated with a socket - local address (`getsockname`) or the peer's address (`getpeername`)
 
@@ -471,6 +487,23 @@ int getpeername(int sockfd, struct sockaddr *peeraddr, socklen_t *addrlen);
 
 /* Both return: 0 if OK, −1 on error */
 ```
+
+### 5.9. Normal termination
+
+In a standard TCP client-server application, a termination goes in four-packet sequence:
+
+1. Part of process termination is the closing of all open descriptors, so the client
+socket is closed by the kernel. This sends a `FIN` to the server.
+    > At this point: <br> - Server socket: `CLOSE_WAIT` state <br> - Client socket: `FIN_WAIT_2` state
+
+2. The server TCP responds with an `ACK` to the client's `FIN`.
+
+3. The server then closes the descriptors, causes the final two segments of the TCP connection termination to take place: a `FIN` from the server to the client, and an `ACK` from the client.
+    > At this point, client socket enters `TIME_WAIT` state
+
+### 5.10. SIGPIPE Signal
+
+### 5.11. Server/Client Crash Scenarios
 
 ## Lab 
 
