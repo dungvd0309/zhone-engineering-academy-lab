@@ -820,14 +820,87 @@ int poll(struct pollfd *fdarray, unsigned long nfds, int timeout);
 
 ## 9. epoll
 
-### interest list vs. ready list
-### level-triggered vs. edge-triggered
-### epoll_create/epoll_ctl/epoll_wait
-### why epoll scales better than select/poll
+### 9.1. Interest List vs. Ready list
+### 9.2. Level-triggered vs. Edge-triggered
+### 9.3. epoll_create/epoll_ctl/epoll_wait
+### 9.4. Why epoll Scales Better Than select/poll
 
 ## 10. Combining multiplexing with threads: single-thread + select/poll/epoll vs. multi-thread + select/poll/epoll designs, and when each is appropriate
 
-## 11. Name & Address Conversion: DNS, gethostbyname, getaddrinfo
+## 11. Name & Address Conversion
+
+### 11.1. DNS
+
+DNS (Domain Name System) is the phonebook of the Internet, which maps names to addresses.
+
+Common DNS record types:
+
+|Record|Meaning|Example|
+|-|-|-|
+|A|name → IPv4|`example.com. IN A 93.184.216.34`|
+|AAAA|name → IPv6|`example.com. IN AAAA 2606:2800:220:1:248:1893:25c8:1946`|
+|CNAME|alias → canonical name|`www.example.com. IN CNAME example.com.`
+|PTR|IP → name (reverse lookup)|`34.216.184.93.in-addr.arpa. IN PTR example.com.`|
+|MX|mail exchanger|`example.com. IN MX 10 mail.example.com.`|
+|NS|authoritative name server|`example.com. IN NS ns1.example.com.`|
+|SRV|service → host + port|`_sip._tcp.example.com. IN SRV 10 60 5060 sip.example.com.`|
+
+### 11.2. gethostbyname()/gethostbyaddr()
+
+Get an IP address for a hostname, or vice-versa
+
+```c
+#include <sys/socket.h>
+#include <netdb.h>
+
+struct hostent *gethostbyname(const char *name); 
+struct hostent *gethostbyaddr(const char *addr, int len, int type);
+```
+
+Only support IPv4.
+
+Deprecated by POSIX.
+
+### 11.3. getaddrinfo
+
+Get information about a host name and/or service and load up a `struct sockaddr` with the result
+
+```c
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
+int getaddrinfo(const char *nodename, const char *servname,
+                const struct addrinfo *hints,
+                struct addrinfo **res);
+
+void freeaddrinfo(struct addrinfo *ai);
+
+const char *gai_strerror(int ecode);
+
+struct addrinfo {
+    int ai_flags;             // AI_PASSIVE, AI_CANONNAME, ...
+    int ai_family;            // AF_xxx
+    int ai_socktype;          // SOCK_xxx
+    int ai_protocol;          // 0 (auto) or IPPROTO_TCP, IPPROTO_UDP
+
+    socklen_t ai_addrlen;     // length of ai_addr
+
+    char *ai_canonname;       // canonical name for nodename
+    struct sockaddr *ai_addr; // binary address
+    struct addrinfo *ai_next; // next structure in linked list
+};
+```
+
+- `nodename`: hostname or IPv4/IPv6 address 
+- `servname`: port number ("80", "8080") or service name (“http”, “tftp”, “smtp”, “pop”)
+- `hints`: 
+    - A pointer to an `addrinfo` that filters what you want back.
+    - Optional, can be `NULL`.
+    - `memset()` before use.
+    - Only four fields are read from `hints`: `ai_flags`, `ai_family`, `ai_socktype`, `ai_protocol`
+- `res` (output):
+    - On success, `*res` points to the head of a heap-allocated linked list of addrinfo structs, one per usable address/socktype combination. Must be freed with `freeaddrinfo`.
 
 ## Lab 
 
