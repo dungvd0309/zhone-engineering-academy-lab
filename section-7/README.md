@@ -697,23 +697,39 @@ There are five I/O models in Unix:
 
 ![io_models.png](./img/io_models.png)
 
-### 8.2. Blocking vs. Non-blocking I/O
+### 8.2. Blocking vs. Non-blocking I/O vs. I/O Multiplexing
 
-**Blocking I/O**
+#### 8.2.1. Blocking I/O
 
 > When a requested I/O operation cannot be completed without putting the process to sleep, put the process to sleep.
 
 Blocking operations: `read`, `recv`, `recvfrom`, `write`, `send`, `sendto`, `accept`, `connect`.
 
-**Non-blocking I/O**
+**Pros**: Simple, blocking doesn't cost CPU usage.
+
+**Cons**: One thread can wait on only one FD at a time. Serving many connections needs thread-per-connection, which costs memory.
+
+#### 8.2.2. Non-blocking I/O
 
 > When a requested I/O operation cannot be completed without putting the process to sleep, do not put the process to sleep, but return an error instead.
 
 Use `fcntl()` with the flag `O_NONBLOCK` to make a socket non-blocking.
 
+**Pros**: The thread is never stuck, so it can handle many FDs.
+
+**Cons**: It forces busy-polling, burns CPU usage.
+
+#### 8.2.3. I/O multiplexing
+
+> One blocking call waits on many fds at once and returns when any of them is ready.
+
+**Pros**: One thread serves thousands of connections; it sleeps (no CPU) when idle and wakes only on activity. 
+
+**Cons**: One slow handler stalls all connections (a slow disk read, a DNS lookup via `getaddrinfo`, a big `memcpy`, JSON parsing, a mutex wait)
+
 ### 8.3. select Functions
 
-The `select()` function is used to monitor multiple sockets or file descriptors (FDs) simultaneously and check whether any FD is ready for reading, writing, or has an exceptional condition.
+The `select()` function is used to monitor multiple sockets or FDs simultaneously and check whether any FD is ready for reading, writing, or has an exceptional condition.
 
 ```c
 #include <sys/select.h>
@@ -801,6 +817,17 @@ int poll(struct pollfd *fdarray, unsigned long nfds, int timeout);
     - `INFTIM`: Wait forever
     - `0`: Return immediately, do not block
     - `> 0`: Wait specified number of milliseconds
+
+## 9. epoll
+
+### interest list vs. ready list
+### level-triggered vs. edge-triggered
+### epoll_create/epoll_ctl/epoll_wait
+### why epoll scales better than select/poll
+
+## 10. Combining multiplexing with threads: single-thread + select/poll/epoll vs. multi-thread + select/poll/epoll designs, and when each is appropriate
+
+## 11. Name & Address Conversion: DNS, gethostbyname, getaddrinfo
 
 ## Lab 
 
