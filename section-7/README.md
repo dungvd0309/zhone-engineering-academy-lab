@@ -636,7 +636,6 @@ Level: `IPPROTO_IP`
 |IP_TOS|Type-of-service and precedence |int|
 |IP_TTL|TTL |int|
 
-
 ### 7.4. TCP Socket Options
 
 Level: `IPPROTO_TCP`
@@ -684,9 +683,124 @@ if (fcntl(fd, F_SETFL, flags) < 0)
     err_sys("F_SETFL error");
 ```
 
-
 ## 8. I/O Multiplexing
 
+### 8.1. I/O Models
+
+There are five I/O models in Unix:
+
+- blocking I/O
+- nonblocking I/O
+- I/O multiplexing (`select` and `poll`)
+- signal driven I/O (`SIGIO`)
+- asynchronous I/O (the POSIX `aio_` functions)
+
+![io_models.png](./img/io_models.png)
+
+### 8.2. Blocking vs. Non-blocking I/O
+
+**Blocking I/O**
+
+> When a requested I/O operation cannot be completed without putting the process to sleep, put the process to sleep.
+
+Blocking operations: `read`, `recv`, `recvfrom`, `write`, `send`, `sendto`, `accept`, `connect`.
+
+**Non-blocking I/O**
+
+> When a requested I/O operation cannot be completed without putting the process to sleep, do not put the process to sleep, but return an error instead.
+
+Use `fcntl()` with the flag `O_NONBLOCK` to make a socket non-blocking.
+
+### 8.3. select Functions
+
+The `select()` function is used to monitor multiple sockets or file descriptors (FDs) simultaneously and check whether any FD is ready for reading, writing, or has an exceptional condition.
+
+```c
+#include <sys/select.h>
+#include <sys/time.h>
+
+int select(int maxfdp1, fd_set *readset, fd_set *writeset, 
+           fd_set *exceptset, const struct timeval *timeout);
+
+/* Returns: positive count of ready descriptors, 0 on timeout, −1 on error */
+```
+
+- `maxfdp1`: The highest descriptor value across all sets plus 1
+
+- `readfds`: Set of fds to watch for readability
+
+- `writefds`: Set of fds to watch for writability
+
+- `exceptfds`: Set of fds to watch for exceptional conditions
+
+- `timeval`: 
+    ```c
+    struct timeval {
+        long tv_sec;
+        long tv_usec;
+    };
+    ```
+    - `NULL`: Wait forever
+    - `{0,0}`: Do not wait at all - polling
+    - A specific value: Wait up to a fixed amount of time
+
+```c
+void FD_ZERO(fd_set *fdset);          // clear all, call before use
+void FD_SET(int fd, fd_set *fdset);   // add fd to the set
+void FD_CLR(int fd, fd_set *fdset);   // remove fd from the set
+int  FD_ISSET(int fd, fd_set *fdset); // check if fd is "ready" (after select returns)
+```
+
+### 8.4. pselect Functions
+
+```c
+#include <sys/select.h>
+#include <signal.h>
+#include <time.h>
+
+int pselect(int maxfdp1, fd_set *readset, fd_set *writeset, fd_set *exceptset,
+            const struct timespec *timeout, const sigset_t *sigmask);
+
+/* Returns: count of ready descriptors, 0 on timeout, −1 on error */
+```
+
+`pselect` contains two changes from the normal `select` function:
+
+- `timeout` uses `timespec` struct:
+    ```c
+    struct timespec {
+        time_t tv_sec; /* seconds */
+        long tv_nsec; /* nanoseconds */
+    };
+    ```
+- `sigmask`: a pointer to a signal mask, disables the delivery of certain signals
+
+### 8.5. poll Functions
+
+```c
+#include <poll.h>
+
+int poll(struct pollfd *fdarray, unsigned long nfds, int timeout);
+
+/* Returns: count of ready descriptors, 0 on timeout, −1 on error */
+```
+- `fdarray`: an array of information
+    ```c
+    struct pollfd {
+        int fd;         // the socket descriptor
+        short events;   // bitmap of events we're interested in
+        short revents;  // on return, bitmap of events that occurred
+    };
+    ```
+    - `events`:
+        - `POLLIN`: Alert me when data is ready to `recv()` on this socket.
+        - `POLLOUT`: Alert me when I can `send()` data to this socket without blocking.
+        - `POLLHUP`: Alert me when the remote closed the connection.
+        
+- `timeout`:
+    - `INFTIM`: Wait forever
+    - `0`: Return immediately, do not block
+    - `> 0`: Wait specified number of milliseconds
 
 ## Lab 
 
