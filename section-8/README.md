@@ -151,13 +151,24 @@ The Linux way of looking at devices distinguishes between three fundamental devi
 Each module implements one of these types, is classifiable classifiable as a char module, a block module, or a network module
 
 Character devices
-- can be accessed as a stream of bytes 
+- Data is a stream of bytes, accessed sequentially, usually with no buffering by the kernel’s block layer. 
 - A driver usually implements at least `open`, `close`, `read`, and `write` syscalls
+- Examples: serial ports (`/dev/ttyS0`, `/dev/ttyUSB0`), keyboards and mice (`/dev/input/event*`), I2C and SPI user nodes (`/dev/i2c-1`), `/dev/null`, `/dev/random`, GPIO chips
+
+Block devices
+
+- Data is stored in fixed-size blocks and can be accessed randomly (jump to any block). Access goes through the kernel’s block layer, which provides caching, request queuing, I/O scheduling, and filesystem support.
+- Examples: HDD, SSD, NVMe (`/dev/nvme0n1`), SD card and eMMC (`/dev/mmcblk0`), USB flash drives (`/dev/sda`), RAM disks
+
+Network devices
+
+- Data moves as packets. These are the exception: they have no node in /dev. They are identified by interface name instead.
+- Examples: `eth0`, `wlan0`, `lo`, `can0`, `tun0`
 
 
 ## 7. Module lifecycle
 
-Build -> Load -> Init -> Live -> Unload -> Free
+### 7.1. Init, Exit
 
 `module_init(x)`: module initialization entry point
 
@@ -167,10 +178,94 @@ Build -> Load -> Init -> Live -> Unload -> Free
 
 - `x`: exit function, must has the form `void my_init(void);`
 
-Module lifecycle: init/exit functions, insmod/rmmod/modprobe, module parameters, dependencies
+### 7.2. insmod/rmmod/modprobe
 
-`dmesg`: print or control the kernel ring buffer
+`insmod`: inserts a single module by **path**.
 
+```bash
+sudo insmod ./hello.ko
+sudo insmod ./hello.ko param=value   # pass module parameters
+```
+
+`rmmod`: removes a loaded module by **name**
+
+```bash
+sudo rmmod hello
+```
+
+`modprobe`: the smarter front end. It looks up modules by name in `/lib/modules/$(uname -r)/` using `modules.dep`, and loads dependencies automatically.
+
+```bash
+sudo modprobe hello           # load, with dependencies
+sudo modprobe hello param=value
+sudo modprobe -r hello        # unload, plus now-unused dependencies
+```
+
+> Extra: `dmesg`: print or control the kernel ring buffer
+
+### 7.3. Module Parameters
+
+Module parameters are values that can be passed to a module when it loads
+
+They can change modules behaviors without recompiling.
+
+***Declare parameters with:***
+
+```c
+module_param(var, type, perm)
+```
+
+- var: the C variable (must be a global or static)
+- type: `int`, `uint`, `long`, `bool`, `charp` (string), `module_param_array` (array)
+- perm: the permission bits of the file exposed in sysfs
+
+***Set parameters with:***
+
+```bash
+sudo insmod ./hello.ko param=value
+sudo modprobe hello param=value
+```
+
+### 7.4. Module Dependencies
+
+A module depends on another when it uses symbols (functions or variables) that the other module exports.
+
+Example: a USB mouse driver depends on the core `usbhid` and `usbcore` modules.
+
+***Export a symbol:***
+
+```c
+/* module_a.c */
+int a_helper(int x) { return x * 2; }
+EXPORT_SYMBOL(a_helper);          /* or EXPORT_SYMBOL_GPL */
+```
+
+`EXPORT_SYMBOL_GPL`: only modules that declare a GPL-compatible license can use it.
+
+Licenses the kernel treats as GPL-compatible (Set via `MODULE_LICENSE()`):
+
+- `"GPL"`
+- `"GPL v2"`
+- `"GPL and additional rights"`
+- `"Dual BSD/GPL"`
+- `"Dual MIT/GPL"`
+- `"Dual MPL/GPL"`
+
+***Use a symbol:***
+
+```c
+c
+/* module_b.c */
+#include <../modules_a.h> /* shared header declaring a_helper*/
+
+extern int a_helper(int x);       
+
+static int __init b_init(void)
+{
+    pr_info("result: %d\n", a_helper(21));
+    return 0;
+}
+```
 
 ## 8. Lab
 
@@ -181,6 +276,46 @@ Draw a one-page diagram of the Linux kernel's major components (Memory Managemen
 ### Lab 2
 
 Write hello.ko with init/exit functions and a module parameter (module_param); load/unload it and inspect dmesg 
+
+[Link to lab 2](./lab/hello_module/)
+
+Compile it with `make`:
+```bash
+$ make
+$ ls
+hello.c  hello.ko  hello.mod  hello.mod.c  hello.mod.o  hello.o  Makefile  modules.order  Module.symvers
+```
+
+Load and unload the module:
+
+```bash
+$ sudo insmod hello.ko 
+$ sudo rmmod hello
+```
+
+Inspect dmesg:
+
+```bash
+$ sudo dmesg | tail
+...
+[ 6172.005110] hello: Hello World 1
+[ 6173.189945] hello: Goodbye cruel world!
+```
+
+Let's load the module with setting the parameter this time:
+
+```bash
+$ sudo insmod hello.ko count=5
+$ sudo rmmod hello
+$ sudo dmesg | tail
+...
+[ 6295.020230] hello: Hello World 1
+[ 6295.020236] hello: Hello World 2
+[ 6295.020236] hello: Hello World 3
+[ 6295.020237] hello: Hello World 4
+[ 6295.020237] hello: Hello World 5
+[ 6299.345153] hello: Goodbye cruel world!
+```
 
 ### Lab 3
 
