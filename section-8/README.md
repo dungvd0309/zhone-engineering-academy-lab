@@ -61,8 +61,11 @@ Linux is a free, open-source operating system (OS) based on Unix, created by Lin
 
 The CPU has privilege levels:
 - x86 uses Protection rings: Ring 0, 1, 2, 3
+
     ![protection_ring.png](./img/protection_ring.png)
+
 - ARM use Expection levels: EL0, EL1, EL2, EL3
+
     ![el.png](./img/el.png)
 
 Linux uses two:
@@ -151,6 +154,7 @@ The Linux way of looking at devices distinguishes between three fundamental devi
 Each module implements one of these types, is classifiable classifiable as a char module, a block module, or a network module
 
 Character devices
+
 - Data is a stream of bytes, accessed sequentially, usually with no buffering by the kernel’s block layer. 
 - A driver usually implements at least `open`, `close`, `read`, and `write` syscalls
 - Examples: serial ports (`/dev/ttyS0`, `/dev/ttyUSB0`), keyboards and mice (`/dev/input/event*`), I2C and SPI user nodes (`/dev/i2c-1`), `/dev/null`, `/dev/random`, GPIO chips
@@ -162,7 +166,7 @@ Block devices
 
 Network devices
 
-- Data moves as packets. These are the exception: they have no node in /dev. They are identified by interface name instead.
+- Data moves as packets. These are the exception: they have no node in `/dev`. They are identified by interface name instead.
 - Examples: `eth0`, `wlan0`, `lo`, `can0`, `tun0`
 
 
@@ -201,7 +205,7 @@ sudo modprobe hello param=value
 sudo modprobe -r hello        # unload, plus now-unused dependencies
 ```
 
-> Extra: `dmesg`: print or control the kernel ring buffer
+> Tip: `dmesg` to print or control the kernel ring buffer
 
 ### 7.3. Module Parameters
 
