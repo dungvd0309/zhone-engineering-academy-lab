@@ -992,6 +992,41 @@ Test failure scenarios: server crash, client crash, and correct handling of SIGP
 ### Lab 3
 Write a UDP echo server/client 
 
+[Link to lab 3](./lab/lab_3/)
+
+
+Open the UDP server
+```c
+./server
+Server IP: 0.0.0.0
+Server Port: 1234
+```
+
+Use 2 clients to send UDP packets to the server:
+```c
+./client
+1234
+Server echo: 1234
+```
+
+```c
+$ ./client
+5678
+Server echo: 5678
+78910
+Server echo: 8910
+```
+```c
+./server
+Server IP: 0.0.0.0
+Server Port: 1234
+[127.0.0.1:33887] sent 5 bytes: 1234
+
+[127.0.0.1:39723] sent 5 bytes: 5678
+
+[127.0.0.1:39723] sent 7 bytes: 8910
+```
+
 ### Lab 4
 Build a chat-room server first using select(), then rebuild it using poll(), and compare the code 
 
