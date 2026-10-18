@@ -1030,6 +1030,12 @@ Server Port: 1234
 ### Lab 4
 Build a chat-room server first using select(), then rebuild it using poll(), and compare the code 
 
+Server programs using select() and poll() are in [this folder](./lab/lab_4/)
+
+We use `nc` (netcat) for the tcp client testing.
+
+![lab_4.png](./img/lab_4.png)
+
 ### Lab 5
 Rebuild the chat-room server once more using epoll (edge-triggered, non-blocking sockets) 
 
