@@ -136,9 +136,14 @@ static ssize_t btn_read(struct file *f, char __user *buf, size_t len, loff_t *of
 {
     char s[3];
 
+    if (len == 0)
+        return 0;
+
     s[0] = gpio_get_value(btn_gpio()) ? '1' : '0';
     s[1] = '\n';
     s[2] = '\0';
+
+    *off = 0;
 
     return simple_read_from_buffer(buf, len, off, s, sizeof(s));
 }
