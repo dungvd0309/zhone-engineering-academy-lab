@@ -467,4 +467,44 @@ In C program: use `open()`, `read()`, `write()`
 
 ## 5. Netlink Socket Interface
 
+### 5.1. Problems with other approaches
+
+`ioctl`: useful for asking a subsystem to perform a specific control/query operation, but:
+
+- Synchronous operations.
+- Each operation has its own command and data format, no common convention.
+
+
+`/proc` or `/sys`: is file-like interface, useful for exposed state, but:
+
+- Repeatedly reading files to detect changes = polling
+- Wasteful and changes may occur between checks
+
+Netlink combines structured requests with asynchronous updates
+
+```
+          ask / request change
+process ───────────────────────► kernel 
+        ◄───────────────────────
+          data / result / event
+```
+
+
+### 5.2. What is Netlink
+Netlink is a socket address family (AF_NETLINK) for message-based communication between the kernel and user space
+
+```c
+#include <asm/types.h>
+#include <sys/socket.h>
+#include <linux/netlink.h>
+
+netlink_socket = socket(AF_NETLINK, socket_type, netlink_family);
+```
+
+- `socket_type`: Either `SOCK_RAW` or `SOCK_DGRAM` are valid. Netlink is always datagram-oriented
+
+- `netlink_family`: the kernel module or netlink group to communicate with. See [netlink(7)](https://man7.org/linux/man-pages/man7/netlink.7.html)
+
+
+
 ## Why Netlink matters for network applications
